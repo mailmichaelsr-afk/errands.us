@@ -9,7 +9,8 @@ export async function handler() {
     const sql = neon(process.env.DATABASE_URL);
 
     const rows = await sql`
-      SELECT * FROM requests
+      SELECT id, title, pickup, dropoff
+      FROM requests
       ORDER BY created_at DESC
     `;
 
@@ -17,6 +18,7 @@ export async function handler() {
       statusCode: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(rows),
     };
