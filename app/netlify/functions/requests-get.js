@@ -1,3 +1,5 @@
+// netlify/functions/requests-get.js
+
 import { neon } from "@neondatabase/serverless";
 
 export const config = {
@@ -9,17 +11,14 @@ export async function handler() {
     const sql = neon(process.env.DATABASE_URL);
 
     const rows = await sql`
-      SELECT id, title, pickup, dropoff
+      SELECT id, title, pickup, dropoff, status
       FROM requests
       ORDER BY created_at DESC
     `;
 
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(rows),
     };
   } catch (err) {
