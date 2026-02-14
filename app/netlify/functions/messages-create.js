@@ -2,30 +2,20 @@
 
 import { neon } from "@neondatabase/serverless";
 
-export const config = {
-  runtime: "nodejs",
-};
+export const config = { runtime: "nodejs" };
 
 export async function handler(event) {
-  try {
-    const sql = neon(process.env.DATABASE_URL);
-    const data = JSON.parse(event.body);
+  const sql = neon(process.env.DATABASE_URL);
+  const data = JSON.parse(event.body);
 
-    const result = await sql`
-      INSERT INTO messages (request_id, sender_id, body)
-      VALUES (${data.request_id},1,${data.body})
-      RETURNING *
-    `;
+  const result = await sql`
+    INSERT INTO messages (request_id, sender_id, sender_name, body)
+    VALUES (${data.request_id}, 1, ${data.sender_name || 'Anonymous'}, ${data.body})
+    RETURNING *
+  `;
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(result[0]),
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    };
-  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify(result[0]),
+  };
 }
