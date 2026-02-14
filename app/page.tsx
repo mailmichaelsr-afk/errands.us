@@ -1,172 +1,175 @@
 // app/page.tsx
-"use client";
 
+"use client";
 import { useEffect, useState } from "react";
 
-type RequestRow = {
+type Req = {
   id: number;
   title: string;
+  description?: string | null;
   pickup: string;
   dropoff: string;
   status: string;
+  scheduled_time?: string | null;
+  preferred_runner_id?: number | null;
+  territory_key?: string | null;
+};
+
+type Availability = {
+  runner_id: number;
+  is_available: boolean;
+  note?: string | null;
+  updated_at?: string;
 };
 
 export default function Home() {
-  const [requests, setRequests] = useState<RequestRow[]>([]);
+  const [requests, setRequests] = useState<Req[]>([]);
+  const [available, setAvailable] = useState<Availability[]>([]);
   const [title, setTitle] = useState("");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [description, setDescription] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [preferredRunnerId, setPreferredRunnerId] = useState<number | "">("");
+  const [territoryKey, setTerritoryKey] = useState("");
 
-  const loadRequests = async () => {
-    setError("");
-    try {
-      const res = await fetch("/.netlify/functions/requests-get");
-      const data = await res.json();
-      setRequests(Array.isArray(data) ? data : []);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load requests");
-    }
+  const load = async () => {
+    const r = await fetch("/.netlify/functions/requests-get");
+    const a = await fetch("/.netlify/functions/availability-get");
+    setRequests(await r.json());
+    setAvailable(await a.json());
   };
 
   useEffect(() => {
-    loadRequests();
+    load();
   }, []);
 
-  const createRequest = async () => {
-    setError("");
-    const t = title.trim();
-    const p = pickup.trim();
-    const d = dropoff.trim();
-
-    if (!t || !p || !d) {
-      setError("Please enter Title, Pickup, and Dropoff.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/.netlify/functions/requests-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: t, pickup: p, dropoff: d }),
-      });
-
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to create request");
-      }
-
-      setTitle("");
-      setPickup("");
-      setDropoff("");
-
-      await loadRequests();
-    } catch (e: any) {
-      setError(e?.message || "Failed to create request");
-    } finally {
-      setLoading(false);
-    }
+  const create = async () => {
+    await fetch("/.netlify/functions/requests-create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        pickup,
+        dropoff,
+        description,
+        scheduled_time: scheduledTime || null,
+        preferred_runner_id: preferredRunnerId === "" ? null : preferredRunnerId,
+        territory_key: territoryKey || null,
+      }),
+    });
+    setTitle("");
+    setPickup("");
+    setDropoff("");
+    setDescription("");
+    setScheduledTime("");
+    setPreferredRunnerId("");
+    setTerritoryKey("");
+    load();
   };
 
-  const acceptRequest = async (id: number) => {
-    setError("");
-    try {
-      const res = await fetch("/.netlify/functions/requests-accept", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
+  const accept = async (id: number) => {
+    const runner_id = Number(prompt("Runner ID accepting this job? (temporary)") || "0");
+    if (!runner_id) return;
+    await fetch("/.netlify/functions/requests-accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, runner_id }),
+    });
+    load();
+  };
 
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to accept request");
-      }
+  const complete = async (id: number) => {
+    await fetch("/.netlify/functions/requests-complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    load();
+  };
 
-      await loadRequests();
-    } catch (e: any) {
-      setError(e?.message || "Failed to accept request");
-    }
+  const schedule = async (id: number) => {
+    const when = prompt("New scheduled time (ISO or YYYY-MM-DD HH:mm):");
+    if (!when) return;
+    await fetch("/.netlify/functions/requests-schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, scheduled_time: when }),
+    });
+    load();
   };
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>Errands.us</h1>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <a href="/" style={{ textDecoration: "underline" }}>
-          Board
-        </a>
-        <a href="/runner" style={{ textDecoration: "underline" }}>
-          Runner
-        </a>
+      <div style={{ marginBottom: 12 }}>
+        <a href="/">Board</a> | <a href="/runner">Runner</a>
       </div>
 
-      <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8, marginBottom: 18 }}>
-        <h2 style={{ marginTop: 0 }}>Create Errand</h2>
+      <h3>Available Runners</h3>
+      {available.length === 0 && <p>No runners currently available.</p>}
+      {available.map((r) => (
+        <div key={r.runner_id}>
+          Runner #{r.runner_id} {r.note ? `(${r.note})` : ""}
+        </div>
+      ))}
 
-        <input
-          style={{ width: "100%", marginBottom: 8, padding: 8 }}
-          placeholder="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+      <hr />
 
-        <input
-          style={{ width: "100%", marginBottom: 8, padding: 8 }}
-          placeholder="Pickup"
-          value={pickup}
-          onChange={(e) => setPickup(e.target.value)}
-        />
+      <h3>Create Errand</h3>
+      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <br />
+      <input placeholder="Pickup" value={pickup} onChange={(e) => setPickup(e.target.value)} />
+      <br />
+      <input placeholder="Dropoff" value={dropoff} onChange={(e) => setDropoff(e.target.value)} />
+      <br />
+      <textarea
+        placeholder="Description / Notes"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+      <br />
+      <input
+        type="datetime-local"
+        value={scheduledTime}
+        onChange={(e) => setScheduledTime(e.target.value)}
+      />
+      <br />
+      <input
+        type="number"
+        placeholder="Preferred Runner ID"
+        value={preferredRunnerId}
+        onChange={(e) => setPreferredRunnerId(e.target.value === "" ? "" : Number(e.target.value))}
+      />
+      <br />
+      <input
+        placeholder="Territory Key (optional)"
+        value={territoryKey}
+        onChange={(e) => setTerritoryKey(e.target.value)}
+      />
+      <br />
+      <button onClick={create}>Post</button>
 
-        <input
-          style={{ width: "100%", marginBottom: 10, padding: 8 }}
-          placeholder="Dropoff"
-          value={dropoff}
-          onChange={(e) => setDropoff(e.target.value)}
-        />
+      <hr />
 
-        <button onClick={createRequest} disabled={loading}>
-          {loading ? "Posting..." : "Post Errand"}
-        </button>
-
-        {error && <p style={{ marginTop: 10 }}>{error}</p>}
-      </div>
-
-      <h2>Runner Request Board</h2>
-
-      {requests.length === 0 && <p>No errands yet.</p>}
-
+      <h2>Board</h2>
       {requests.map((r) => (
-        <div
-          key={r.id}
-          style={{
-            border: "1px solid #ccc",
-            padding: 12,
-            marginBottom: 10,
-            borderRadius: 8,
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <b>{r.title}</b>
-            <span>Status: {r.status}</span>
-          </div>
+        <div key={r.id} style={{ border: "1px solid #ccc", margin: 10, padding: 10 }}>
+          <b>{r.title}</b>
+          <p>{r.pickup} → {r.dropoff}</p>
+          {r.description && <p>{r.description}</p>}
+          <p>Status: {r.status}</p>
+          {r.scheduled_time && <p>Scheduled: {new Date(r.scheduled_time).toLocaleString()}</p>}
+          {r.preferred_runner_id && <p>Preferred Runner: #{r.preferred_runner_id}</p>}
+          {r.territory_key && <p>Territory: {r.territory_key}</p>}
 
-          <div style={{ marginTop: 6 }}>Pickup: {r.pickup}</div>
-          <div>Dropoff: {r.dropoff}</div>
-
-          <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a href={`/request/${r.id}`} style={{ textDecoration: "underline" }}>
-              Open chat
-            </a>
-
-            {r.status !== "accepted" && (
-              <button onClick={() => acceptRequest(r.id)}>Accept</button>
-            )}
-          </div>
+          <button onClick={() => (location.href = `/request/${r.id}`)}>Open Chat</button>
+          {r.status === "open" && <button onClick={() => accept(r.id)}>Accept</button>}
+          {r.status === "accepted" && <button onClick={() => complete(r.id)}>Complete</button>}
+          <button onClick={() => schedule(r.id)}>Schedule</button>
         </div>
       ))}
     </div>
   );
-  }
+      }
