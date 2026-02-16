@@ -5,27 +5,40 @@ import { neon } from "@neondatabase/serverless";
 export const config = { runtime: "nodejs" };
 
 export async function handler(event) {
-  const sql = neon(process.env.DATABASE_URL);
-  const data = JSON.parse(event.body);
+  try {
+    const sql = neon(process.env.DATABASE_URL);
+    const data = JSON.parse(event.body);
 
-  const result = await sql`
-    INSERT INTO requests
-      (title, description, pickup, dropoff, created_by,
-       scheduled_time, preferred_runner_id, territory_key)
-    VALUES
-      (${data.title},
-       ${data.description || null},
-       ${data.pickup},
-       ${data.dropoff},
-       ${data.created_by || null},
-       ${data.scheduled_time || null},
-       ${data.preferred_runner_id || null},
-       ${data.territory_key || null})
-    RETURNING *
-  `;
+    if (!data.title || !data.pickup || !data.dropoff) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "title, pickup and dropoff are required" }),
+      };
+    }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify(result[0]),
-  };
+    const result = await sql`
+      INSERT INTO requests
+        (title, description, pickup, dropoff, status, created_by, created_at)
+      VALUES
+        (${data.title},
+         ${data.description || null},
+         ${data.pickup},
+         ${data.dropoff},
+         'open',
+         ${data.created_by || null},
+         NOW())
+      RETURNING *
+    `;
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result[0]),
+    };
+  } catch (err) {
+    console.error("requests-create error:", err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message }),
+    };
+  }
 }
