@@ -1,4 +1,4 @@
-// app/admin/page.tsx
+// app/admin/page.tsx (with time-based territories)
 
 "use client";
 import { useEffect, useState } from "react";
@@ -14,6 +14,9 @@ type Territory = {
   owner_email?: string;
   status: string;
   price?: number;
+  time_slot_days?: string[];
+  time_slot_start?: string;
+  time_slot_end?: string;
 };
 
 type User = {
@@ -35,6 +38,20 @@ type Merchant = {
   submitted_by: string;
 };
 
+const DAY_LABELS: Record<string, string> = {
+  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', 
+  fri: 'Fri', sat: 'Sat', sun: 'Sun'
+};
+
+const PRESET_SHIFTS = [
+  { label: '24/7', days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '23:59' },
+  { label: 'Weekdays', days: ['mon','tue','wed','thu','fri'], start: '00:00', end: '23:59' },
+  { label: 'Weekends', days: ['sat','sun'], start: '00:00', end: '23:59' },
+  { label: 'Morning (6am-2pm)', days: ['mon','tue','wed','thu','fri'], start: '06:00', end: '14:00' },
+  { label: 'Evening (2pm-10pm)', days: ['mon','tue','wed','thu','fri'], start: '14:00', end: '22:00' },
+  { label: 'Late Night (10pm-6am)', days: ['mon','tue','wed','thu','fri','sat','sun'], start: '22:00', end: '06:00' },
+];
+
 export default function AdminDashboard() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
@@ -48,6 +65,9 @@ export default function AdminDashboard() {
   const [newTerritoryName, setNewTerritoryName] = useState("");
   const [newTerritoryZips, setNewTerritoryZips] = useState("");
   const [newTerritoryPrice, setNewTerritoryPrice] = useState("");
+  const [newTimeDays, setNewTimeDays] = useState<string[]>(['mon','tue','wed','thu','fri','sat','sun']);
+  const [newTimeStart, setNewTimeStart] = useState("00:00");
+  const [newTimeEnd, setNewTimeEnd] = useState("23:59");
   
   const [loadingData, setLoadingData] = useState(true);
   const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
@@ -79,6 +99,20 @@ export default function AdminDashboard() {
     if (isAdmin) loadData();
   }, [isAdmin]);
 
+  const applyPreset = (preset: typeof PRESET_SHIFTS[0]) => {
+    setNewTimeDays(preset.days);
+    setNewTimeStart(preset.start);
+    setNewTimeEnd(preset.end);
+  };
+
+  const toggleDay = (day: string) => {
+    if (newTimeDays.includes(day)) {
+      setNewTimeDays(newTimeDays.filter(d => d !== day));
+    } else {
+      setNewTimeDays([...newTimeDays, day]);
+    }
+  };
+
   const createTerritory = async () => {
     if (!newTerritoryName.trim() || !newTerritoryZips.trim()) return;
     
@@ -92,12 +126,18 @@ export default function AdminDashboard() {
         zip_codes: zipArray,
         price: newTerritoryPrice ? parseFloat(newTerritoryPrice) : null,
         status: "available",
+        time_slot_days: newTimeDays,
+        time_slot_start: newTimeStart + ":00",
+        time_slot_end: newTimeEnd + ":00",
       }),
     });
     
     setNewTerritoryName("");
     setNewTerritoryZips("");
     setNewTerritoryPrice("");
+    setNewTimeDays(['mon','tue','wed','thu','fri','sat','sun']);
+    setNewTimeStart("00:00");
+    setNewTimeEnd("23:59");
     setShowTerritoryForm(false);
     loadData();
   };
@@ -149,6 +189,17 @@ export default function AdminDashboard() {
       body: JSON.stringify({ id: merchantId, status: "rejected" }),
     });
     loadData();
+  };
+
+  const formatTimeSlot = (t: Territory) => {
+    if (!t.time_slot_days || !t.time_slot_start || !t.time_slot_end) return "24/7";
+    
+    const days = t.time_slot_days.map(d => DAY_LABELS[d]).join(', ');
+    const start = t.time_slot_start.slice(0, 5); // "HH:MM"
+    const end = t.time_slot_end.slice(0, 5);
+    
+    if (start === '00:00' && end === '23:59') return days;
+    return `${days} ${start}-${end}`;
   };
 
   if (loading || !isAdmin) return null;
@@ -211,6 +262,8 @@ export default function AdminDashboard() {
         .btn-danger:hover { background: #c82333; }
         .btn-secondary { background: #f5f0e8; color: #555; border: 1.5px solid #e0d8cc; }
         .btn-secondary:hover { background: #e8e0d4; }
+        .btn-ghost { background: #faf8f4; color: #666; font-size: 0.8rem; padding: 6px 12px; }
+        .btn-ghost:hover { background: #f0f0e8; }
 
         .card {
           background: #fff; border-radius: 14px; padding: 20px;
@@ -235,6 +288,22 @@ export default function AdminDashboard() {
           background: #faf8f4; color: #1a1a1a; outline: none;
         }
         .input:focus { border-color: #7ab87a; background: #fff; }
+        
+        .label { font-size: 0.88rem; font-weight: 500; color: #555; margin: 14px 0 8px; display: block; }
+        
+        .preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .day-toggle { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+        .day-btn {
+          padding: 8px 14px; border-radius: 8px; border: 1.5px solid #e0d8cc;
+          background: #faf8f4; cursor: pointer; font-size: 0.85rem;
+          font-family: 'DM Sans', sans-serif; font-weight: 500;
+          transition: all 0.2s; color: #666;
+        }
+        .day-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
+        .day-btn:hover:not(.active) { border-color: #7ab87a; }
+        
+        .time-row { display: flex; gap: 10px; align-items: center; }
+        .time-row .input { margin-bottom: 0; flex: 1; }
 
         .badge {
           display: inline-block; padding: 3px 10px; border-radius: 100px;
@@ -245,6 +314,7 @@ export default function AdminDashboard() {
         .badge-pending { background: #fff0e6; color: #c67700; }
         .badge-active { background: #d4f0d4; color: #2d6a2d; }
         .badge-suspended { background: #ffe0e0; color: #c00; }
+        .timeslot-badge { background: #e6f0ff; color: #0056b3; margin-left: 8px; }
 
         select.input { cursor: pointer; }
         .empty { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
@@ -303,7 +373,7 @@ export default function AdminDashboard() {
               <div className="form-card">
                 <input
                   className="input"
-                  placeholder="Territory name (e.g. Downtown LA)"
+                  placeholder="Territory name (e.g. Downtown LA - Evening Shift)"
                   value={newTerritoryName}
                   onChange={e => setNewTerritoryName(e.target.value)}
                 />
@@ -320,7 +390,51 @@ export default function AdminDashboard() {
                   value={newTerritoryPrice}
                   onChange={e => setNewTerritoryPrice(e.target.value)}
                 />
-                <div style={{ display: "flex", gap: 10 }}>
+                
+                <div className="label">Time Slot Presets</div>
+                <div className="preset-grid">
+                  {PRESET_SHIFTS.map(preset => (
+                    <button
+                      key={preset.label}
+                      className="btn btn-ghost"
+                      onClick={() => applyPreset(preset)}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="label">Days Active</div>
+                <div className="day-toggle">
+                  {['mon','tue','wed','thu','fri','sat','sun'].map(day => (
+                    <button
+                      key={day}
+                      className={`day-btn ${newTimeDays.includes(day) ? 'active' : ''}`}
+                      onClick={() => toggleDay(day)}
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="label">Time Range</div>
+                <div className="time-row">
+                  <input
+                    className="input"
+                    type="time"
+                    value={newTimeStart}
+                    onChange={e => setNewTimeStart(e.target.value)}
+                  />
+                  <span>to</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={newTimeEnd}
+                    onChange={e => setNewTimeEnd(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                   <button className="btn btn-primary" onClick={createTerritory}>Create</button>
                   <button className="btn btn-secondary" onClick={() => setShowTerritoryForm(false)}>Cancel</button>
                 </div>
@@ -335,7 +449,9 @@ export default function AdminDashboard() {
               territories.map(t => (
                 <div key={t.id} className="card">
                   <div className="card-title">
-                    {t.name} <span className={`badge badge-${t.status}`}>{t.status}</span>
+                    {t.name} 
+                    <span className={`badge badge-${t.status}`}>{t.status}</span>
+                    <span className="badge timeslot-badge">⏰ {formatTimeSlot(t)}</span>
                   </div>
                   <div className="card-meta">
                     Zip codes: {t.zip_codes?.join(", ") || "None"}
