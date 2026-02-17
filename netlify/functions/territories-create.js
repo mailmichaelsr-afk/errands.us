@@ -1,4 +1,4 @@
-// netlify/functions/territories-create.js
+// netlify/functions/territories-create.js (v2 with time slots)
 
 import { neon } from "@neondatabase/serverless";
 
@@ -16,15 +16,24 @@ export async function handler(event) {
       };
     }
 
+    // Default to 24/7 if no time slots specified
+    const timeDays = data.time_slot_days || ['mon','tue','wed','thu','fri','sat','sun'];
+    const timeStart = data.time_slot_start || '00:00:00';
+    const timeEnd = data.time_slot_end || '23:59:59';
+
     const result = await sql`
       INSERT INTO territories
-        (name, zip_codes, price, monthly_fee, status, created_at)
+        (name, zip_codes, price, monthly_fee, status, 
+         time_slot_days, time_slot_start, time_slot_end, created_at)
       VALUES
         (${data.name},
          ${data.zip_codes},
          ${data.price || null},
          ${data.monthly_fee || null},
          ${data.status || 'available'},
+         ${timeDays},
+         ${timeStart},
+         ${timeEnd},
          NOW())
       RETURNING *
     `;
