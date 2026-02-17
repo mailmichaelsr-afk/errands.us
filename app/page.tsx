@@ -5,15 +5,17 @@ import { useEffect, useState } from "react";
 
 const CATEGORIES = [
   { key: "grocery",    label: "Grocery",         emoji: "🛒" },
-  { key: "pharmacy",   label: "Pharmacy",         emoji: "💊" },
-  { key: "restaurant", label: "Restaurant",       emoji: "🍜" },
-  { key: "shipping",   label: "Shipping",         emoji: "📦" },
-  { key: "petcare",    label: "Pet Care",         emoji: "🐾" },
-  { key: "hardware",   label: "Hardware",         emoji: "🔧" },
-  { key: "bakery",     label: "Bakery & Coffee",  emoji: "☕" },
-  { key: "liquor",     label: "Liquor",           emoji: "🍷" },
-  { key: "services",   label: "Services",         emoji: "🤝" },
+  { key: "pharmacy",   label: "Pharmacy",        emoji: "💊" },
+  { key: "restaurant", label: "Restaurant",      emoji: "🍜" },
+  { key: "shipping",   label: "Shipping",        emoji: "📦" },
+  { key: "petcare",    label: "Pet Care",        emoji: "🐾" },
+  { key: "hardware",   label: "Hardware",        emoji: "🔧" },
+  { key: "bakery",     label: "Bakery & Coffee", emoji: "☕" },
+  { key: "liquor",     label: "Liquor",          emoji: "🍷" },
+  { key: "services",   label: "Services",        emoji: "🤝" },
 ];
+
+const PAYMENT_METHODS = ["Cash", "Venmo", "Zelle", "PayPal", "CashApp", "Apple Pay", "Other"];
 
 type Req = {
   id: number;
@@ -21,6 +23,10 @@ type Req = {
   pickup: string;
   dropoff: string;
   status: string;
+  pickup_time?: string;
+  delivery_time?: string;
+  offered_amount?: number;
+  payment_method?: string;
 };
 
 type Merchant = {
@@ -33,13 +39,28 @@ type Merchant = {
 export default function Home() {
   const [requests, setRequests] = useState<Req[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  
+  // Basic fields
   const [title, setTitle] = useState("");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
+  
+  // NEW: Timing fields
+  const [pickupFlex, setPickupFlex] = useState("asap"); // asap | flexible | scheduled
+  const [pickupTime, setPickupTime] = useState("");
+  const [deliveryFlex, setDeliveryFlex] = useState("flexible");
+  const [deliveryTime, setDeliveryTime] = useState("");
+  
+  // NEW: Cost & payment
+  const [offeredAmount, setOfferedAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentNotes, setPaymentNotes] = useState("");
+  
   const [loading, setLoading] = useState(false);
   const [posted, setPosted] = useState(false);
   const [validationMsg, setValidationMsg] = useState("");
   const [postError, setPostError] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
 
   // Merchant picker state
   const [showPicker, setShowPicker] = useState(false);
@@ -48,7 +69,6 @@ export default function Home() {
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
 
   const load = async () => {
-    // Load requests and merchants independently so one failure can't block the other
     try {
       const reqRes = await fetch("/.netlify/functions/requests-get");
       if (reqRes.ok) setRequests(await reqRes.json());
@@ -76,7 +96,6 @@ export default function Home() {
   };
 
   const create = async () => {
-    // Show a clear message instead of silently failing
     if (!title.trim()) { setValidationMsg("Please describe what you need."); return; }
     if (!pickup.trim()) { setValidationMsg("Please add a pickup location."); return; }
     if (!dropoff.trim()) { setValidationMsg("Please add a dropoff location."); return; }
@@ -85,14 +104,33 @@ export default function Home() {
     setPostError("");
     setLoading(true);
     try {
+      const payload: any = {
+        title: title.trim(),
+        pickup: pickup.trim(),
+        dropoff: dropoff.trim(),
+        pickup_flexibility: pickupFlex,
+        delivery_flexibility: deliveryFlex,
+      };
+      
+      if (pickupFlex === "scheduled" && pickupTime) payload.pickup_time = new Date(pickupTime).toISOString();
+      if (deliveryFlex === "scheduled" && deliveryTime) payload.delivery_time = new Date(deliveryTime).toISOString();
+      if (offeredAmount) payload.offered_amount = parseFloat(offeredAmount);
+      if (paymentMethod) payload.payment_method = paymentMethod;
+      if (paymentNotes.trim()) payload.payment_notes = paymentNotes.trim();
+
       const res = await fetch("/.netlify/functions/requests-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), pickup: pickup.trim(), dropoff: dropoff.trim() }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+      
+      // Reset form
       setTitle(""); setPickup(""); setDropoff("");
+      setPickupFlex("asap"); setPickupTime(""); setDeliveryFlex("flexible"); setDeliveryTime("");
+      setOfferedAmount(""); setPaymentMethod("Cash"); setPaymentNotes("");
       setSelectedMerchant(null);
+      setShowDetails(false);
       setPosted(true);
       setTimeout(() => setPosted(false), 2500);
       load();
@@ -121,7 +159,7 @@ export default function Home() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
@@ -181,8 +219,45 @@ export default function Home() {
           background: #fff;
         }
         .input::placeholder { color: #bbb; }
+        select.input { cursor: pointer; }
 
-        /* Pickup row */
+        /* NEW: Radio group for timing */
+        .radio-group {
+          display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+        }
+        .radio-option {
+          flex: 1; min-width: 100px;
+          padding: 10px 12px; border-radius: 10px;
+          border: 1.5px solid #e0d8cc;
+          background: #faf8f4; cursor: pointer;
+          text-align: center; font-size: 0.88rem;
+          transition: all 0.2s;
+        }
+        .radio-option.active {
+          border-color: #7ab87a; background: #f0f7f0;
+          color: #2d4a2d; font-weight: 500;
+        }
+        .radio-option:hover:not(.active) { border-color: #c8d8c8; }
+
+        .label {
+          display: block; font-size: 0.85rem; font-weight: 500;
+          color: #555; margin: 14px 0 6px;
+        }
+
+        .row { display: flex; gap: 10px; }
+        .row .input { margin-bottom: 0; }
+
+        .toggle-details {
+          background: none; border: none;
+          color: #7ab87a; font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem; font-weight: 500; cursor: pointer;
+          padding: 8px 0; margin-top: 8px;
+          display: flex; align-items: center; gap: 5px;
+          transition: color 0.2s;
+        }
+        .toggle-details:hover { color: #5fa05f; }
+
+        /* Pickup row (existing code, unchanged) */
         .pickup-row { margin-bottom: 10px; }
         .pickup-selected {
           display: flex; align-items: center; justify-content: space-between;
@@ -226,7 +301,7 @@ export default function Home() {
         }
         .pick-merchant-btn:hover { border-color: #7ab87a; background: #f0f7f0; color: #2d4a2d; }
 
-        /* Merchant picker dropdown */
+        /* Merchant picker dropdown (existing, unchanged) */
         .picker {
           background: #fff; border-radius: 16px; margin-top: 8px;
           box-shadow: 0 8px 32px rgba(45,74,45,0.12);
@@ -294,7 +369,7 @@ export default function Home() {
         .post-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .post-btn.success { background: #7ab87a; }
 
-        /* Requests list */
+        /* Requests list (existing, unchanged) */
         .section-head {
           font-family: 'Fraunces', serif; font-size: 1.3rem;
           color: #2d4a2d; margin-bottom: 14px;
@@ -450,6 +525,111 @@ export default function Home() {
             value={dropoff}
             onChange={e => setDropoff(e.target.value)}
           />
+
+          {/* Toggle for additional details */}
+          <button className="toggle-details" onClick={() => setShowDetails(!showDetails)}>
+            {showDetails ? "▼" : "▶"} Add timing, cost & payment details
+          </button>
+
+          {showDetails && (
+            <>
+              {/* Pickup timing */}
+              <div className="label">When should we pick it up?</div>
+              <div className="radio-group">
+                <div
+                  className={`radio-option ${pickupFlex === "asap" ? "active" : ""}`}
+                  onClick={() => setPickupFlex("asap")}
+                >
+                  ASAP
+                </div>
+                <div
+                  className={`radio-option ${pickupFlex === "flexible" ? "active" : ""}`}
+                  onClick={() => setPickupFlex("flexible")}
+                >
+                  Flexible
+                </div>
+                <div
+                  className={`radio-option ${pickupFlex === "scheduled" ? "active" : ""}`}
+                  onClick={() => setPickupFlex("scheduled")}
+                >
+                  Schedule
+                </div>
+              </div>
+              {pickupFlex === "scheduled" && (
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={pickupTime}
+                  onChange={e => setPickupTime(e.target.value)}
+                />
+              )}
+
+              {/* Delivery timing */}
+              <div className="label">When do you need it delivered?</div>
+              <div className="radio-group">
+                <div
+                  className={`radio-option ${deliveryFlex === "asap" ? "active" : ""}`}
+                  onClick={() => setDeliveryFlex("asap")}
+                >
+                  ASAP
+                </div>
+                <div
+                  className={`radio-option ${deliveryFlex === "flexible" ? "active" : ""}`}
+                  onClick={() => setDeliveryFlex("flexible")}
+                >
+                  Flexible
+                </div>
+                <div
+                  className={`radio-option ${deliveryFlex === "scheduled" ? "active" : ""}`}
+                  onClick={() => setDeliveryFlex("scheduled")}
+                >
+                  By specific time
+                </div>
+              </div>
+              {deliveryFlex === "scheduled" && (
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={deliveryTime}
+                  onChange={e => setDeliveryTime(e.target.value)}
+                />
+              )}
+
+              {/* Cost */}
+              <div className="label">How much are you offering? (optional)</div>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                placeholder="$ Leave blank to negotiate"
+                value={offeredAmount}
+                onChange={e => setOfferedAmount(e.target.value)}
+              />
+
+              {/* Payment method */}
+              <div className="row">
+                <div style={{ flex: 1 }}>
+                  <div className="label">Payment method</div>
+                  <select
+                    className="input"
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value)}
+                  >
+                    {PAYMENT_METHODS.map(pm => (
+                      <option key={pm} value={pm}>{pm}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <input
+                className="input"
+                placeholder="Payment notes (e.g. Venmo @username, or 'will pay on delivery')"
+                value={paymentNotes}
+                onChange={e => setPaymentNotes(e.target.value)}
+              />
+            </>
+          )}
 
           {validationMsg && (
             <div style={{color:"#c44",fontSize:"0.85rem",marginTop:8,padding:"8px 12px",background:"#fff0f0",borderRadius:8}}>
