@@ -11,9 +11,9 @@ type Territory = {
   zip_codes: string[];
   owner_id?: number;
   owner_name?: string;
+  owner_email?: string;
   status: string;
   price?: number;
-  assigned_at?: string;
 };
 
 type User = {
@@ -44,13 +44,13 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   
-  // New territory form
   const [showTerritoryForm, setShowTerritoryForm] = useState(false);
   const [newTerritoryName, setNewTerritoryName] = useState("");
   const [newTerritoryZips, setNewTerritoryZips] = useState("");
   const [newTerritoryPrice, setNewTerritoryPrice] = useState("");
   
   const [loadingData, setLoadingData] = useState(true);
+  const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
 
   useEffect(() => {
     if (!loading && (!user || !isAdmin)) {
@@ -102,12 +102,16 @@ export default function AdminDashboard() {
     loadData();
   };
 
-  const assignTerritory = async (territoryId: number, userId: number) => {
+  const assignTerritory = async (territoryId: number) => {
+    const userId = selectedOwner[territoryId];
+    if (!userId) return;
+
     await fetch("/.netlify/functions/territories-assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ territory_id: territoryId, user_id: userId }),
+      body: JSON.stringify({ territory_id: territoryId, user_id: parseInt(userId) }),
     });
+    setSelectedOwner({...selectedOwner, [territoryId]: ""});
     loadData();
   };
 
@@ -159,38 +163,13 @@ export default function AdminDashboard() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-          background: #f5f0e8;
-          min-height: 100vh;
-          font-family: 'DM Sans', sans-serif;
-        }
+        body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
         .page { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
-        .header {
-          display: flex; justify-content: space-between; align-items: center;
-          margin-bottom: 32px;
-        }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
         .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
-        .admin-badge {
-          background: #2d4a2d; color: #f5f0e8;
-          padding: 6px 14px; border-radius: 100px;
-          font-size: 0.8rem; font-weight: 500;
-        }
+        .admin-badge { background: #2d4a2d; color: #f5f0e8; padding: 6px 14px; border-radius: 100px; font-size: 0.8rem; font-weight: 500; }
         
-        .tabs {
-          display: flex; gap: 8px; margin-bottom: 24px;
-          border-bottom: 2px solid #e0d8cc;
-        }
-        .tab {
-          padding: 12px 20px; background: none; border: none;
-          font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
-          font-weight: 500; color: #666; cursor: pointer;
-          border-bottom: 3px solid transparent;
-          transition: all 0.2s; margin-bottom: -2px;
-        }
-        .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
-        .tab:hover:not(.active) { color: #2d4a2d; }
-
         .stats {
           display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 16px; margin-bottom: 32px;
@@ -202,6 +181,17 @@ export default function AdminDashboard() {
         }
         .stat-label { font-size: 0.8rem; color: #999; margin-bottom: 6px; }
         .stat-value { font-family: 'Fraunces', serif; font-size: 2rem; color: #2d4a2d; font-weight: 700; }
+
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid #e0d8cc; }
+        .tab {
+          padding: 12px 20px; background: none; border: none;
+          font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
+          font-weight: 500; color: #666; cursor: pointer;
+          border-bottom: 3px solid transparent;
+          transition: all 0.2s; margin-bottom: -2px;
+        }
+        .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
+        .tab:hover:not(.active) { color: #2d4a2d; }
 
         .section-head {
           font-family: 'Fraunces', serif; font-size: 1.2rem;
@@ -230,7 +220,7 @@ export default function AdminDashboard() {
         }
         .card-title { font-weight: 600; font-size: 1rem; color: #1a1a1a; margin-bottom: 8px; }
         .card-meta { font-size: 0.85rem; color: #999; margin-bottom: 12px; }
-        .card-actions { display: flex; gap: 8px; }
+        .card-actions { display: flex; gap: 8px; align-items: center; }
 
         .form-card {
           background: #fff; border-radius: 14px; padding: 24px;
@@ -289,22 +279,13 @@ export default function AdminDashboard() {
         </div>
 
         <div className="tabs">
-          <button
-            className={`tab ${tab === "territories" ? "active" : ""}`}
-            onClick={() => setTab("territories")}
-          >
+          <button className={`tab ${tab === "territories" ? "active" : ""}`} onClick={() => setTab("territories")}>
             Territories
           </button>
-          <button
-            className={`tab ${tab === "users" ? "active" : ""}`}
-            onClick={() => setTab("users")}
-          >
+          <button className={`tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
             Users {pendingOwners.length > 0 && `(${pendingOwners.length})`}
           </button>
-          <button
-            className={`tab ${tab === "merchants" ? "active" : ""}`}
-            onClick={() => setTab("merchants")}
-          >
+          <button className={`tab ${tab === "merchants" ? "active" : ""}`} onClick={() => setTab("merchants")}>
             Merchants {pendingMerchants.length > 0 && `(${pendingMerchants.length})`}
           </button>
         </div>
@@ -359,17 +340,28 @@ export default function AdminDashboard() {
                   <div className="card-meta">
                     Zip codes: {t.zip_codes?.join(", ") || "None"}
                     {t.price && ` • $${t.price}`}
-                    {t.owner_name && ` • Owner: ${t.owner_name}`}
+                    {t.owner_name && ` • Owner: ${t.owner_name} (${t.owner_email})`}
                   </div>
                   {t.status === "available" && pendingOwners.length > 0 && (
                     <div className="card-actions">
-                      <select className="input" style={{ width: "auto", marginBottom: 0 }}>
+                      <select 
+                        className="input" 
+                        style={{ width: "auto", marginBottom: 0 }}
+                        value={selectedOwner[t.id] || ""}
+                        onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}
+                      >
                         <option value="">Assign to...</option>
                         {pendingOwners.map(u => (
                           <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
                         ))}
                       </select>
-                      <button className="btn btn-success">Assign</button>
+                      <button 
+                        className="btn btn-success"
+                        onClick={() => assignTerritory(t.id)}
+                        disabled={!selectedOwner[t.id]}
+                      >
+                        Assign
+                      </button>
                     </div>
                   )}
                 </div>
@@ -390,12 +382,8 @@ export default function AdminDashboard() {
                       {u.email} • {u.phone} • Applied {new Date(u.created_at).toLocaleDateString()}
                     </div>
                     <div className="card-actions">
-                      <button className="btn btn-success" onClick={() => approveUser(u.id)}>
-                        Approve
-                      </button>
-                      <button className="btn btn-danger" onClick={() => suspendUser(u.id)}>
-                        Reject
-                      </button>
+                      <button className="btn btn-success" onClick={() => approveUser(u.id)}>Approve</button>
+                      <button className="btn btn-danger" onClick={() => suspendUser(u.id)}>Reject</button>
                     </div>
                   </div>
                 ))}
@@ -428,12 +416,8 @@ export default function AdminDashboard() {
                       {m.category} • {m.address} • Submitted by {m.submitted_by}
                     </div>
                     <div className="card-actions">
-                      <button className="btn btn-success" onClick={() => approveMerchant(m.id)}>
-                        Approve
-                      </button>
-                      <button className="btn btn-danger" onClick={() => rejectMerchant(m.id)}>
-                        Reject
-                      </button>
+                      <button className="btn btn-success" onClick={() => approveMerchant(m.id)}>Approve</button>
+                      <button className="btn btn-danger" onClick={() => rejectMerchant(m.id)}>Reject</button>
                     </div>
                   </div>
                 ))}
