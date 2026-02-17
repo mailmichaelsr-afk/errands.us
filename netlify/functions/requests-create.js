@@ -18,7 +18,9 @@ export async function handler(event) {
 
     const result = await sql`
       INSERT INTO requests
-        (title, description, pickup, dropoff, status, created_by, created_at)
+        (title, description, pickup, dropoff, status, created_by, created_at,
+         pickup_time, pickup_flexibility, delivery_time, delivery_flexibility,
+         offered_amount, payment_method, payment_notes)
       VALUES
         (${data.title},
          ${data.description || null},
@@ -26,7 +28,14 @@ export async function handler(event) {
          ${data.dropoff},
          'open',
          ${data.created_by || null},
-         NOW())
+         NOW(),
+         ${data.pickup_time || null},
+         ${data.pickup_flexibility || 'flexible'},
+         ${data.delivery_time || null},
+         ${data.delivery_flexibility || 'flexible'},
+         ${data.offered_amount || null},
+         ${data.payment_method || null},
+         ${data.payment_notes || null})
       RETURNING *
     `;
 
