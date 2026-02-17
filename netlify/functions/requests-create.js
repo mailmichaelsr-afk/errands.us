@@ -1,4 +1,4 @@
-// netlify/functions/requests-create.js (v3 with territory routing)
+// netlify/functions/requests-create.js (v4 with time-based territory routing)
 
 import { neon } from "@neondatabase/serverless";
 
@@ -16,26 +16,56 @@ export async function handler(event) {
       };
     }
 
-    // Extract zip code from dropoff address (simple regex)
+    // Extract zip code from dropoff address
     const zipMatch = data.dropoff.match(/\b\d{5}\b/);
     const dropoffZip = zipMatch ? zipMatch[0] : null;
 
     let territoryId = null;
     let assignedTo = null;
 
-    // Find territory that covers this zip code
     if (dropoffZip) {
+      // Determine target time for routing
+      let targetTime;
+      let targetDay;
+      
+      if (data.pickup_time) {
+        // Use scheduled pickup time
+        const dt = new Date(data.pickup_time);
+        targetTime = dt.toTimeString().slice(0, 8); // "HH:MM:SS"
+        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][dt.getDay()];
+      } else if (data.pickup_flexibility === 'asap') {
+        // Use current time
+        const now = new Date();
+        targetTime = now.toTimeString().slice(0, 8);
+        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+      } else {
+        // Default to current time for flexible requests
+        const now = new Date();
+        targetTime = now.toTimeString().slice(0, 8);
+        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+      }
+
+      // Find territory that covers this zip + time slot
       const territories = await sql`
-        SELECT id, owner_id
+        SELECT id, owner_id, name
         FROM territories
         WHERE status = 'sold'
           AND ${dropoffZip} = ANY(zip_codes)
+          AND time_in_slot(
+            ${targetDay},
+            ${targetTime}::TIME,
+            time_slot_days,
+            time_slot_start,
+            time_slot_end
+          )
         LIMIT 1
       `;
 
       if (territories.length > 0) {
         territoryId = territories[0].id;
         assignedTo = territories[0].owner_id;
+        
+        console.log(`Routed to territory: ${territories[0].name} (${targetDay} ${targetTime})`);
       }
     }
 
