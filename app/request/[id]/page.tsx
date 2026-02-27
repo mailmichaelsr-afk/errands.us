@@ -3,7 +3,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 type Message = {
   id: number;
@@ -22,7 +22,9 @@ type Request = {
   created_at: string;
 };
 
-export default function RequestPage({ params }: { params: { id: string } }) {
+export default function RequestPage() {
+  const params = useParams();
+  const requestId = params.id as string;
   const { user, dbUserId, loading } = useAuth();
   const router = useRouter();
   const [msgs, setMsgs] = useState<Message[]>([]);
@@ -33,9 +35,11 @@ export default function RequestPage({ params }: { params: { id: string } }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
+    if (!requestId) return;
+    
     try {
       const [msgsRes, reqsRes] = await Promise.all([
-        fetch(`/.netlify/functions/messages-get?id=${params.id}`),
+        fetch(`/.netlify/functions/messages-get?id=${requestId}`),
         fetch("/.netlify/functions/requests-get"),
       ]);
       
@@ -46,7 +50,7 @@ export default function RequestPage({ params }: { params: { id: string } }) {
       
       if (reqsRes.ok) {
         const allRequests = await reqsRes.json();
-        const thisRequest = allRequests.find((r: Request) => r.id === parseInt(params.id));
+        const thisRequest = allRequests.find((r: Request) => r.id === parseInt(requestId));
         setRequest(thisRequest || null);
       }
     } catch (e) {
@@ -55,8 +59,8 @@ export default function RequestPage({ params }: { params: { id: string } }) {
   };
 
   useEffect(() => {
-    load();
-  }, [params.id]);
+    if (requestId) load();
+  }, [requestId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,14 +81,14 @@ export default function RequestPage({ params }: { params: { id: string } }) {
   };
 
   const send = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || !requestId) return;
     setSending(true);
     try {
       await fetch("/.netlify/functions/messages-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          request_id: parseInt(params.id),
+          request_id: parseInt(requestId),
           body: text,
           sender_id: dbUserId || null,
           sender_name: senderName || "Anonymous",
