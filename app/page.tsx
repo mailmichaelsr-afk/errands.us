@@ -1,695 +1,283 @@
-// app/page.tsx
+// app/page.tsx (requests only visible to territory owners)
 
 "use client";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 
-const CATEGORIES = [
-  { key: "grocery",    label: "Grocery",         emoji: "🛒" },
-  { key: "pharmacy",   label: "Pharmacy",        emoji: "💊" },
-  { key: "restaurant", label: "Restaurant",      emoji: "🍜" },
-  { key: "shipping",   label: "Shipping",        emoji: "📦" },
-  { key: "petcare",    label: "Pet Care",        emoji: "🐾" },
-  { key: "hardware",   label: "Hardware",        emoji: "🔧" },
-  { key: "bakery",     label: "Bakery & Coffee", emoji: "☕" },
-  { key: "liquor",     label: "Liquor",          emoji: "🍷" },
-  { key: "services",   label: "Services",        emoji: "🤝" },
-];
-
-const PAYMENT_METHODS = ["Cash", "Venmo", "Zelle", "PayPal", "CashApp", "Apple Pay", "Other"];
-
-type Req = {
+type Request = {
   id: number;
   title: string;
   pickup: string;
   dropoff: string;
   status: string;
-  pickup_time?: string;
-  delivery_time?: string;
-  offered_amount?: number;
-  payment_method?: string;
-};
-
-type Merchant = {
-  id: number;
-  name: string;
-  category: string;
-  address?: string;
+  created_at: string;
 };
 
 export default function Home() {
-  const [requests, setRequests] = useState<Req[]>([]);
-  const [merchants, setMerchants] = useState<Merchant[]>([]);
-  
-  // Basic fields
+  const { user, isTerritoryOwner, loading } = useAuth();
+  const router = useRouter();
+  const [reqs, setReqs] = useState<Request[]>([]);
   const [title, setTitle] = useState("");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
-  
-  // NEW: Timing fields
-  const [pickupFlex, setPickupFlex] = useState("asap"); // asap | flexible | scheduled
-  const [pickupTime, setPickupTime] = useState("");
-  const [deliveryFlex, setDeliveryFlex] = useState("flexible");
-  const [deliveryTime, setDeliveryTime] = useState("");
-  
-  // NEW: Cost & payment
-  const [offeredAmount, setOfferedAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [paymentNotes, setPaymentNotes] = useState("");
-  
-  const [loading, setLoading] = useState(false);
-  const [posted, setPosted] = useState(false);
-  const [validationMsg, setValidationMsg] = useState("");
-  const [postError, setPostError] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Merchant picker state
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickerCategory, setPickerCategory] = useState<string | null>(null);
-  const [pickerSearch, setPickerSearch] = useState("");
-  const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
 
   const load = async () => {
+    // Only territory owners can see requests
+    if (!isTerritoryOwner) return;
+    
     try {
-      const reqRes = await fetch("/.netlify/functions/requests-get");
-      if (reqRes.ok) setRequests(await reqRes.json());
-    } catch (e) { console.error("Failed to load requests:", e); }
-    try {
-      const merRes = await fetch("/.netlify/functions/merchants-get");
-      if (merRes.ok) setMerchants(await merRes.json());
-    } catch (e) { console.error("Failed to load merchants:", e); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const selectMerchant = (m: Merchant) => {
-    setSelectedMerchant(m);
-    setPickup(m.address || m.name);
-    setShowPicker(false);
-    setPickerSearch("");
-    setPickerCategory(null);
-    setValidationMsg("");
-  };
-
-  const clearMerchant = () => {
-    setSelectedMerchant(null);
-    setPickup("");
-  };
-
-  const create = async () => {
-    if (!title.trim()) { setValidationMsg("Please describe what you need."); return; }
-    if (!pickup.trim()) { setValidationMsg("Please add a pickup location."); return; }
-    if (!dropoff.trim()) { setValidationMsg("Please add a dropoff location."); return; }
-
-    setValidationMsg("");
-    setPostError("");
-    setLoading(true);
-    try {
-      const payload: any = {
-        title: title.trim(),
-        pickup: pickup.trim(),
-        dropoff: dropoff.trim(),
-        pickup_flexibility: pickupFlex,
-        delivery_flexibility: deliveryFlex,
-      };
-      
-      if (pickupFlex === "scheduled" && pickupTime) payload.pickup_time = new Date(pickupTime).toISOString();
-      if (deliveryFlex === "scheduled" && deliveryTime) payload.delivery_time = new Date(deliveryTime).toISOString();
-      if (offeredAmount) payload.offered_amount = parseFloat(offeredAmount);
-      if (paymentMethod) payload.payment_method = paymentMethod;
-      if (paymentNotes.trim()) payload.payment_notes = paymentNotes.trim();
-
-      const res = await fetch("/.netlify/functions/requests-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`Server responded with ${res.status}`);
-      
-      // Reset form
-      setTitle(""); setPickup(""); setDropoff("");
-      setPickupFlex("asap"); setPickupTime(""); setDeliveryFlex("flexible"); setDeliveryTime("");
-      setOfferedAmount(""); setPaymentMethod("Cash"); setPaymentNotes("");
-      setSelectedMerchant(null);
-      setShowDetails(false);
-      setPosted(true);
-      setTimeout(() => setPosted(false), 2500);
-      load();
-    } catch (e: any) {
-      setPostError(e.message || "Something went wrong — please try again.");
-    } finally {
-      setLoading(false);
+      const res = await fetch("/.netlify/functions/requests-get");
+      if (res.ok) setReqs(await res.json());
+    } catch (e) {
+      console.error("Failed to load:", e);
     }
   };
 
-  const filteredMerchants = merchants.filter(m => {
-    const matchCat = !pickerCategory || m.category === pickerCategory;
-    const matchSearch = !pickerSearch ||
-      m.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
-      (m.address || "").toLowerCase().includes(pickerSearch.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  useEffect(() => {
+    if (user && isTerritoryOwner) load();
+  }, [user, isTerritoryOwner]);
 
-  const statusColor: Record<string, string> = {
-    open: "#d4f0d4", accepted: "#fdf3cc", completed: "#e8e8e8",
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !pickup || !dropoff) return;
+
+    setSubmitting(true);
+    try {
+      await fetch("/.netlify/functions/requests-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, pickup, dropoff }),
+      });
+      setTitle("");
+      setPickup("");
+      setDropoff("");
+      load();
+    } catch (e) {
+      console.error("Submit failed:", e);
+    }
+    setSubmitting(false);
   };
-  const statusLabel: Record<string, string> = {
-    open: "🟢 Open", accepted: "🟡 In Progress", completed: "✅ Done",
-  };
+
+  // Show nothing while checking auth
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#f5f0e8",
+        fontFamily: "'DM Sans', sans-serif"
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // Don't render anything if not logged in (will redirect)
+  if (!user) return null;
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
         body {
           background: #f5f0e8;
           background-image:
-            radial-gradient(circle at 20% 20%, rgba(134,193,134,0.12) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(255,200,120,0.12) 0%, transparent 50%);
+            radial-gradient(circle at 70% 5%, rgba(255,200,120,0.12) 0%, transparent 45%),
+            radial-gradient(circle at 20% 95%, rgba(134,193,134,0.1) 0%, transparent 45%);
           min-height: 100vh;
           font-family: 'DM Sans', sans-serif;
         }
-
-        .page { max-width: 680px; margin: 0 auto; padding: 28px 16px 80px; }
-
-        .header {
-          display: flex; justify-content: space-between; align-items: center;
-          margin-bottom: 28px; gap: 12px; flex-wrap: wrap;
+        .page { max-width: 640px; margin: 0 auto; padding: 28px 20px 80px; }
+        .hero {
+          text-align: center; margin-bottom: 32px;
         }
-        .logo {
-          font-family: 'Fraunces', serif; font-size: 1.9rem;
-          font-weight: 700; color: #2d4a2d; letter-spacing: -0.5px;
-        }
+        .logo { font-family: 'Fraunces', serif; font-size: 2.2rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
-        .nav-links { display: flex; gap: 8px; }
-        .nav-link {
-          display: flex; align-items: center; gap: 5px;
-          background: #2d4a2d; color: #f5f0e8; text-decoration: none;
-          padding: 8px 14px; border-radius: 100px;
-          font-size: 0.83rem; font-weight: 500;
-          transition: background 0.2s, transform 0.1s;
+        .tagline {
+          font-size: 0.95rem; color: #888; margin-top: 6px;
         }
-        .nav-link:hover { background: #3d6b3d; transform: translateY(-1px); }
-        .nav-link.secondary {
-          background: #fff; color: #2d4a2d;
-          border: 1.5px solid #e0d8cc;
-        }
-        .nav-link.secondary:hover { background: #f0f7f0; border-color: #7ab87a; }
 
-        /* Post card */
         .card {
-          background: #fff; border-radius: 20px; padding: 24px;
-          box-shadow: 0 4px 24px rgba(45,74,45,0.08);
-          border: 1px solid rgba(45,74,45,0.06); margin-bottom: 32px;
+          background: #fff; border-radius: 16px; padding: 24px;
+          margin-bottom: 24px;
+          box-shadow: 0 2px 12px rgba(45,74,45,0.07);
+          border: 1px solid rgba(45,74,45,0.05);
         }
         .card-title {
           font-family: 'Fraunces', serif; font-size: 1.2rem;
-          color: #2d4a2d; margin-bottom: 18px;
+          color: #2d4a2d; margin-bottom: 16px; font-weight: 600;
+        }
+        .form-group { margin-bottom: 14px; }
+        .label {
+          display: block; font-size: 0.88rem; color: #555;
+          font-weight: 500; margin-bottom: 6px;
         }
         .input {
-          display: block; width: 100%; padding: 12px 14px; margin-bottom: 10px;
-          border: 1.5px solid #e0d8cc; border-radius: 12px;
+          width: 100%; padding: 12px 14px;
+          border: 1.5px solid #e0d8cc; border-radius: 11px;
           font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
           background: #faf8f4; color: #1a1a1a; outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
+          transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
         }
         .input:focus {
-          border-color: #7ab87a; box-shadow: 0 0 0 3px rgba(122,184,122,0.15);
+          border-color: #7ab87a;
           background: #fff;
+          box-shadow: 0 0 0 3px rgba(122,184,122,0.1);
         }
         .input::placeholder { color: #bbb; }
-        select.input { cursor: pointer; }
-
-        /* NEW: Radio group for timing */
-        .radio-group {
-          display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+        .btn {
+          width: 100%; padding: 13px; border-radius: 12px;
+          border: none; background: #2d4a2d; color: #f5f0e8;
+          font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
+          font-weight: 500; cursor: pointer;
+          transition: background 0.2s, transform 0.1s;
         }
-        .radio-option {
-          flex: 1; min-width: 100px;
-          padding: 10px 12px; border-radius: 10px;
+        .btn:hover { background: #3d6b3d; }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .req-list { display: flex; flex-direction: column; gap: 12px; }
+        .req-item {
+          background: #faf8f4; padding: 16px; border-radius: 12px;
+          border: 1px solid #e8e0d4;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+        .req-item:hover {
+          background: #fff;
+          box-shadow: 0 4px 12px rgba(45,74,45,0.08);
+        }
+        .req-title { font-weight: 600; font-size: 0.95rem; color: #2d4a2d; margin-bottom: 6px; }
+        .req-route { font-size: 0.85rem; color: #888; }
+        .empty { text-align: center; padding: 40px 20px; color: #bbb; font-size: 0.9rem; }
+        .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+        .user-info {
+          text-align: center;
+          padding: 12px;
+          background: #fff;
+          border-radius: 12px;
+          margin-bottom: 20px;
+          font-size: 0.88rem;
+          color: #666;
+        }
+
+        .nav-links {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        .nav-link {
+          flex: 1;
+          padding: 10px;
+          background: #fff;
           border: 1.5px solid #e0d8cc;
-          background: #faf8f4; cursor: pointer;
-          text-align: center; font-size: 0.88rem;
+          border-radius: 10px;
+          text-align: center;
+          text-decoration: none;
+          color: #2d4a2d;
+          font-size: 0.88rem;
+          font-weight: 500;
           transition: all 0.2s;
         }
-        .radio-option.active {
-          border-color: #7ab87a; background: #f0f7f0;
-          color: #2d4a2d; font-weight: 500;
+        .nav-link:hover {
+          border-color: #7ab87a;
+          background: #f0f7f0;
         }
-        .radio-option:hover:not(.active) { border-color: #c8d8c8; }
-
-        .label {
-          display: block; font-size: 0.85rem; font-weight: 500;
-          color: #555; margin: 14px 0 6px;
-        }
-
-        .row { display: flex; gap: 10px; }
-        .row .input { margin-bottom: 0; }
-
-        .toggle-details {
-          background: none; border: none;
-          color: #7ab87a; font-family: 'DM Sans', sans-serif;
-          font-size: 0.88rem; font-weight: 500; cursor: pointer;
-          padding: 8px 0; margin-top: 8px;
-          display: flex; align-items: center; gap: 5px;
-          transition: color 0.2s;
-        }
-        .toggle-details:hover { color: #5fa05f; }
-
-        /* Pickup row (existing code, unchanged) */
-        .pickup-row { margin-bottom: 10px; }
-        .pickup-selected {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 14px; border-radius: 12px;
-          background: #f0f7f0; border: 1.5px solid #7ab87a;
-          gap: 8px;
-        }
-        .pickup-selected-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .pickup-selected-icon {
-          width: 32px; height: 32px; background: #d4f0d4;
-          border-radius: 8px; display: flex; align-items: center;
-          justify-content: center; font-size: 1rem; flex-shrink: 0;
-        }
-        .pickup-selected-name {
-          font-weight: 500; font-size: 0.9rem; color: #2d4a2d;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .pickup-selected-addr {
-          font-size: 0.78rem; color: #7ab87a; margin-top: 1px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .pickup-clear {
-          background: none; border: none; color: #aaa; font-size: 1.1rem;
-          cursor: pointer; flex-shrink: 0; line-height: 1;
-          padding: 2px 4px; transition: color 0.15s;
-        }
-        .pickup-clear:hover { color: #c00; }
-
-        .pickup-or { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-        .or-line { flex: 1; height: 1px; background: #e8e2d8; }
-        .or-text { font-size: 0.75rem; color: #bbb; }
-
-        .pick-merchant-btn {
-          width: 100%; padding: 10px 14px;
-          background: #faf8f4; color: #555;
-          border: 1.5px dashed #c8d8c8; border-radius: 12px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.88rem;
-          cursor: pointer; display: flex; align-items: center;
-          justify-content: center; gap: 6px;
-          transition: border-color 0.2s, background 0.2s, color 0.2s;
-        }
-        .pick-merchant-btn:hover { border-color: #7ab87a; background: #f0f7f0; color: #2d4a2d; }
-
-        /* Merchant picker dropdown (existing, unchanged) */
-        .picker {
-          background: #fff; border-radius: 16px; margin-top: 8px;
-          box-shadow: 0 8px 32px rgba(45,74,45,0.12);
-          border: 1px solid rgba(45,74,45,0.08);
-          overflow: hidden; margin-bottom: 10px;
-        }
-        .picker-search {
-          display: block; width: 100%; padding: 13px 16px;
-          border: none; border-bottom: 1px solid #f0ece4;
-          font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
-          background: #fff; outline: none; color: #1a1a1a;
-        }
-        .picker-search::placeholder { color: #bbb; }
-        .picker-cats {
-          display: flex; gap: 6px; overflow-x: auto; padding: 10px 12px;
-          border-bottom: 1px solid #f0ece4; scrollbar-width: none;
-        }
-        .picker-cats::-webkit-scrollbar { display: none; }
-        .pcat-btn {
-          padding: 5px 11px; border-radius: 100px; flex-shrink: 0;
-          border: 1.5px solid transparent;
-          font-family: 'DM Sans', sans-serif; font-size: 0.78rem;
-          font-weight: 500; cursor: pointer; transition: all 0.12s;
-        }
-        .pcat-btn.active { background: #2d4a2d; color: #f5f0e8; }
-        .pcat-btn.inactive { background: #f5f0e8; color: #666; border-color: #e8e2d8; }
-        .pcat-btn.inactive:hover { border-color: #7ab87a; color: #2d4a2d; }
-
-        .picker-list { max-height: 220px; overflow-y: auto; }
-        .picker-item {
-          display: flex; align-items: center; gap: 10px;
-          padding: 12px 16px; cursor: pointer;
-          transition: background 0.12s; border-bottom: 1px solid #f9f6f1;
-        }
-        .picker-item:last-child { border-bottom: none; }
-        .picker-item:hover { background: #f5f0e8; }
-        .picker-item-icon {
-          width: 34px; height: 34px; border-radius: 8px; background: #f0f7f0;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 1rem; flex-shrink: 0;
-        }
-        .picker-item-name { font-size: 0.9rem; font-weight: 500; color: #1a1a1a; }
-        .picker-item-addr { font-size: 0.78rem; color: #aaa; margin-top: 1px; }
-        .picker-empty {
-          padding: 24px; text-align: center; color: #bbb; font-size: 0.88rem;
-        }
-        .picker-footer {
-          padding: 10px 16px; border-top: 1px solid #f0ece4;
-          background: #faf8f4;
-        }
-        .picker-footer a {
-          font-size: 0.82rem; color: #7ab87a; text-decoration: none; font-weight: 500;
-        }
-        .picker-footer a:hover { text-decoration: underline; }
-
-        .post-btn {
-          margin-top: 14px; width: 100%; padding: 13px;
-          background: #2d4a2d; color: #f5f0e8; border: none;
-          border-radius: 12px; font-family: 'DM Sans', sans-serif;
-          font-size: 1rem; font-weight: 500; cursor: pointer;
-          transition: background 0.2s, transform 0.15s;
-          display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
-        .post-btn:hover:not(:disabled) { background: #3d6b3d; transform: translateY(-1px); }
-        .post-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .post-btn.success { background: #7ab87a; }
-
-        /* Requests list (existing, unchanged) */
-        .section-head {
-          font-family: 'Fraunces', serif; font-size: 1.3rem;
-          color: #2d4a2d; margin-bottom: 14px;
-          display: flex; align-items: center; gap: 8px;
-        }
-        .count-badge {
-          background: #7ab87a; color: #fff;
-          font-family: 'DM Sans', sans-serif; font-size: 0.73rem;
-          font-weight: 500; padding: 2px 8px; border-radius: 100px;
-        }
-        .request-card {
-          background: #fff; border-radius: 16px; padding: 16px 18px;
-          margin-bottom: 10px;
-          box-shadow: 0 2px 12px rgba(45,74,45,0.06);
-          border: 1px solid rgba(45,74,45,0.05);
-          display: flex; justify-content: space-between;
-          align-items: center; gap: 12px; cursor: pointer;
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .request-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(45,74,45,0.1); }
-        .req-title { font-weight: 500; font-size: 0.97rem; color: #1a1a1a; margin-bottom: 4px; }
-        .req-route { font-size: 0.82rem; color: #999; display: flex; align-items: center; gap: 4px; }
-        .req-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-        .status-pill {
-          font-size: 0.73rem; font-weight: 500;
-          padding: 4px 10px; border-radius: 100px; white-space: nowrap;
-        }
-        .open-btn {
-          background: #f5f0e8; border: none; color: #2d4a2d;
-          font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
-          font-weight: 500; padding: 7px 12px; border-radius: 8px;
-          cursor: pointer; transition: background 0.15s; white-space: nowrap;
-        }
-        .open-btn:hover { background: #e8e0d4; }
-        .empty {
-          text-align: center; padding: 48px 20px;
-          color: #aaa; font-size: 0.93rem;
-        }
-        .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
       `}</style>
 
       <div className="page">
-        <header className="header">
+        <div className="hero">
           <div className="logo">errand<span>s</span></div>
-          <div className="nav-links">
-            <a href="/directory" className="nav-link secondary">📍 Directory</a>
-            <a href="/runner" className="nav-link">🏃 Runner</a>
-          </div>
-        </header>
+          <div className="tagline">Your neighborhood helping hands</div>
+        </div>
+
+        <div className="user-info">
+          👤 {user?.user_metadata?.full_name || user?.email}
+        </div>
+
+        <div className="nav-links">
+          <a href="/directory" className="nav-link">🏪 Merchants</a>
+          {isTerritoryOwner && <a href="/owner" className="nav-link">📊 Dashboard</a>}
+        </div>
 
         <div className="card">
-          <div className="card-title">Need a hand? 🤝</div>
+          <div className="card-title">Post a Request</div>
+          <form onSubmit={submit}>
+            <div className="form-group">
+              <label className="label">What do you need?</label>
+              <input
+                className="input"
+                placeholder="e.g. Pick up prescription from CVS"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">Pickup from</label>
+              <input
+                className="input"
+                placeholder="Store name or address"
+                value={pickup}
+                onChange={e => setPickup(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">Deliver to</label>
+              <input
+                className="input"
+                placeholder="Your address"
+                value={dropoff}
+                onChange={e => setDropoff(e.target.value)}
+                required
+              />
+            </div>
+            <button type="submit" className="btn" disabled={submitting}>
+              {submitting ? "Posting..." : "Post Request"}
+            </button>
+          </form>
+        </div>
 
-          <input
-            className="input"
-            placeholder="What do you need? (e.g. pick up prescriptions)"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
-
-          {/* Pickup — merchant picker or manual */}
-          <div className="pickup-row">
-            {selectedMerchant ? (
-              <div className="pickup-selected">
-                <div className="pickup-selected-left">
-                  <div className="pickup-selected-icon">
-                    {CATEGORIES.find(c => c.key === selectedMerchant.category)?.emoji || "🏪"}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="pickup-selected-name">{selectedMerchant.name}</div>
-                    {selectedMerchant.address && (
-                      <div className="pickup-selected-addr">{selectedMerchant.address}</div>
-                    )}
-                  </div>
-                </div>
-                <button className="pickup-clear" onClick={clearMerchant}>✕</button>
+        {/* Only show requests to territory owners */}
+        {isTerritoryOwner && (
+          <div className="card">
+            <div className="card-title">Recent Requests</div>
+            {reqs.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📦</div>
+                No requests yet.
               </div>
             ) : (
-              <>
-                <input
-                  className="input"
-                  style={{ marginBottom: 6 }}
-                  placeholder="📍 Pickup location (type or pick below)"
-                  value={pickup}
-                  onChange={e => setPickup(e.target.value)}
-                />
-                <div className="pickup-or">
-                  <div className="or-line" />
-                  <span className="or-text">or</span>
-                  <div className="or-line" />
-                </div>
-                <button
-                  className="pick-merchant-btn"
-                  onClick={() => setShowPicker(!showPicker)}
-                >
-                  🏪 Pick from local directory
-                </button>
-              </>
-            )}
-
-            {/* Picker dropdown */}
-            {showPicker && !selectedMerchant && (
-              <div className="picker">
-                <input
-                  className="picker-search"
-                  placeholder="Search stores & services…"
-                  value={pickerSearch}
-                  onChange={e => setPickerSearch(e.target.value)}
-                  autoFocus
-                />
-                <div className="picker-cats">
-                  <button
-                    className={`pcat-btn ${pickerCategory === null ? "active" : "inactive"}`}
-                    onClick={() => setPickerCategory(null)}
-                  >All</button>
-                  {CATEGORIES.map(c => (
-                    <button
-                      key={c.key}
-                      className={`pcat-btn ${pickerCategory === c.key ? "active" : "inactive"}`}
-                      onClick={() => setPickerCategory(pickerCategory === c.key ? null : c.key)}
-                    >
-                      {c.emoji} {c.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="picker-list">
-                  {filteredMerchants.length === 0 ? (
-                    <div className="picker-empty">No results — try a different search</div>
-                  ) : (
-                    filteredMerchants.map(m => (
-                      <div key={m.id} className="picker-item" onClick={() => selectMerchant(m)}>
-                        <div className="picker-item-icon">
-                          {CATEGORIES.find(c => c.key === m.category)?.emoji || "🏪"}
-                        </div>
-                        <div>
-                          <div className="picker-item-name">{m.name}</div>
-                          {m.address && <div className="picker-item-addr">{m.address}</div>}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="picker-footer">
-                  Don't see your place? <a href="/directory">Add it to the directory →</a>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <input
-            className="input"
-            placeholder="🏠 Dropoff location"
-            value={dropoff}
-            onChange={e => setDropoff(e.target.value)}
-          />
-
-          {/* Toggle for additional details */}
-          <button className="toggle-details" onClick={() => setShowDetails(!showDetails)}>
-            {showDetails ? "▼" : "▶"} Add timing, cost & payment details
-          </button>
-
-          {showDetails && (
-            <>
-              {/* Pickup timing */}
-              <div className="label">When should we pick it up?</div>
-              <div className="radio-group">
-                <div
-                  className={`radio-option ${pickupFlex === "asap" ? "active" : ""}`}
-                  onClick={() => setPickupFlex("asap")}
-                >
-                  ASAP
-                </div>
-                <div
-                  className={`radio-option ${pickupFlex === "flexible" ? "active" : ""}`}
-                  onClick={() => setPickupFlex("flexible")}
-                >
-                  Flexible
-                </div>
-                <div
-                  className={`radio-option ${pickupFlex === "scheduled" ? "active" : ""}`}
-                  onClick={() => setPickupFlex("scheduled")}
-                >
-                  Schedule
-                </div>
-              </div>
-              {pickupFlex === "scheduled" && (
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={pickupTime}
-                  onChange={e => setPickupTime(e.target.value)}
-                />
-              )}
-
-              {/* Delivery timing */}
-              <div className="label">When do you need it delivered?</div>
-              <div className="radio-group">
-                <div
-                  className={`radio-option ${deliveryFlex === "asap" ? "active" : ""}`}
-                  onClick={() => setDeliveryFlex("asap")}
-                >
-                  ASAP
-                </div>
-                <div
-                  className={`radio-option ${deliveryFlex === "flexible" ? "active" : ""}`}
-                  onClick={() => setDeliveryFlex("flexible")}
-                >
-                  Flexible
-                </div>
-                <div
-                  className={`radio-option ${deliveryFlex === "scheduled" ? "active" : ""}`}
-                  onClick={() => setDeliveryFlex("scheduled")}
-                >
-                  By specific time
-                </div>
-              </div>
-              {deliveryFlex === "scheduled" && (
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={deliveryTime}
-                  onChange={e => setDeliveryTime(e.target.value)}
-                />
-              )}
-
-              {/* Cost */}
-              <div className="label">How much are you offering? (optional)</div>
-              <input
-                className="input"
-                type="number"
-                step="0.01"
-                placeholder="$ Leave blank to negotiate"
-                value={offeredAmount}
-                onChange={e => setOfferedAmount(e.target.value)}
-              />
-
-              {/* Payment method */}
-              <div className="row">
-                <div style={{ flex: 1 }}>
-                  <div className="label">Payment method</div>
-                  <select
-                    className="input"
-                    value={paymentMethod}
-                    onChange={e => setPaymentMethod(e.target.value)}
+              <div className="req-list">
+                {reqs.slice(0, 10).map(r => (
+                  <div
+                    key={r.id}
+                    className="req-item"
+                    onClick={() => router.push(`/request/${r.id}`)}
                   >
-                    {PAYMENT_METHODS.map(pm => (
-                      <option key={pm} value={pm}>{pm}</option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="req-title">{r.title}</div>
+                    <div className="req-route">
+                      📍 {r.pickup} → 🏠 {r.dropoff}
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              <input
-                className="input"
-                placeholder="Payment notes (e.g. Venmo @username, or 'will pay on delivery')"
-                value={paymentNotes}
-                onChange={e => setPaymentNotes(e.target.value)}
-              />
-            </>
-          )}
-
-          {validationMsg && (
-            <div style={{color:"#c44",fontSize:"0.85rem",marginTop:8,padding:"8px 12px",background:"#fff0f0",borderRadius:8}}>
-              ⚠️ {validationMsg}
-            </div>
-          )}
-          {postError && (
-            <div style={{color:"#c44",fontSize:"0.85rem",marginTop:8,padding:"8px 12px",background:"#fff0f0",borderRadius:8}}>
-              ❌ {postError}
-            </div>
-          )}
-          <button
-            className={`post-btn${posted ? " success" : ""}`}
-            onClick={create}
-            disabled={loading}
-          >
-            {posted ? "✓ Posted!" : loading ? "Posting…" : "Post Request"}
-          </button>
-        </div>
-
-        <div className="section-head">
-          Open Requests
-          {requests.filter(r => r.status !== "completed").length > 0 && (
-            <span className="count-badge">
-              {requests.filter(r => r.status !== "completed").length}
-            </span>
-          )}
-        </div>
-
-        {requests.length === 0 ? (
-          <div className="empty">
-            <div className="empty-icon">🌿</div>
-            No requests yet — be the first!
+            )}
           </div>
-        ) : (
-          requests.map(r => (
-            <div
-              key={r.id}
-              className="request-card"
-              onClick={() => location.href = `/request/${r.id}`}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div className="req-title">{r.title}</div>
-                <div className="req-route">
-                  <span>{r.pickup}</span><span>→</span><span>{r.dropoff}</span>
-                </div>
-              </div>
-              <div className="req-right">
-                <span className="status-pill" style={{ background: statusColor[r.status] || "#eee" }}>
-                  {statusLabel[r.status] || r.status}
-                </span>
-                <button
-                  className="open-btn"
-                  onClick={e => { e.stopPropagation(); location.href = `/request/${r.id}`; }}
-                >
-                  View →
-                </button>
-              </div>
-            </div>
-          ))
         )}
       </div>
     </>
