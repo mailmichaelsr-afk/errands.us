@@ -19,7 +19,7 @@ export async function handler(event) {
     const result = await sql`
       INSERT INTO messages (request_id, sender_id, sender_name, body, created_at)
       VALUES (
-        ${data.request_id},
+        ${parseInt(data.request_id)},
         ${data.sender_id || null},
         ${data.sender_name || 'Anonymous'},
         ${data.body},
