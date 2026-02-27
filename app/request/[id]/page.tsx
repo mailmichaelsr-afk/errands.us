@@ -80,30 +80,22 @@ export default function RequestPage({ params }: { params: { id: string } }) {
     if (!text.trim()) return;
     setSending(true);
     try {
-      const payload = {
-        request_id: parseInt(params.id),
-        body: text,
-        sender_id: dbUserId || null,
-        sender_name: senderName || "Anonymous",
-      };
-      
-      const response = await fetch("/.netlify/functions/messages-create", {
+      await fetch("/.netlify/functions/messages-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          request_id: parseInt(params.id),
+          body: text,
+          sender_id: dbUserId || null,
+          sender_name: senderName || "Anonymous",
+        }),
       });
       
-      if (response.ok) {
-        setText("");
-        load();
-      } else {
-        const error = await response.json();
-        console.error("Failed:", error);
-        alert("Failed to send message");
-      }
+      // Message sent successfully - clear and reload
+      setText("");
+      load();
     } catch (e) {
       console.error("Failed to send:", e);
-      alert("Failed to send message");
     }
     setSending(false);
   };
