@@ -1,4 +1,4 @@
-// app/request/[id]/page.tsx (error fixed)
+// app/request/[id]/page.tsx
 
 "use client";
 import { useEffect, useRef, useState } from "react";
@@ -80,20 +80,30 @@ export default function RequestPage({ params }: { params: { id: string } }) {
     if (!text.trim()) return;
     setSending(true);
     try {
-      await fetch("/.netlify/functions/messages-create", {
+      const payload = {
+        request_id: parseInt(params.id),
+        body: text,
+        sender_id: dbUserId || null,
+        sender_name: senderName || "Anonymous",
+      };
+      
+      const response = await fetch("/.netlify/functions/messages-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          request_id: params.id,
-          body: text,
-          sender_id: dbUserId || null,
-          sender_name: senderName || "Anonymous",
-        }),
+        body: JSON.stringify(payload),
       });
-      setText("");
-      load();
+      
+      if (response.ok) {
+        setText("");
+        load();
+      } else {
+        const error = await response.json();
+        console.error("Failed:", error);
+        alert("Failed to send message");
+      }
     } catch (e) {
       console.error("Failed to send:", e);
+      alert("Failed to send message");
     }
     setSending(false);
   };
