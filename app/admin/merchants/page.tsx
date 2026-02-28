@@ -40,10 +40,10 @@ export default function MerchantsManager() {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
-      router.replace("/login");
+    if (!loading && !isAdmin) {
+      router.replace("/admin");
     }
-  }, [user, isAdmin, loading]);
+  }, [user, isAdmin, loading, router]);
 
   const loadMerchants = async () => {
     setLoadingData(true);
@@ -137,7 +137,24 @@ export default function MerchantsManager() {
     loadMerchants();
   };
 
-  if (loading || !isAdmin) return null;
+  // Show loading state
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#f5f0e8",
+        fontFamily: "'DM Sans', sans-serif"
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // Redirect if not admin
+  if (!isAdmin) return null;
 
   const pending = merchants.filter(m => m.status === "pending");
   const approved = merchants.filter(m => m.status === "approved");
