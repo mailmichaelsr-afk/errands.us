@@ -1,4 +1,4 @@
-// app/page.tsx (with chat indicators and better communication UX)
+// app/page.tsx (with user menu and navigation)
 
 "use client";
 import { useEffect, useState } from "react";
@@ -21,12 +21,13 @@ type Request = {
 };
 
 export default function Home() {
-  const { user, dbUserId, isTerritoryOwner, isCustomer, loading } = useAuth();
+  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
   const router = useRouter();
   
   const [allRequests, setAllRequests] = useState<Request[]>([]);
   const [myRequests, setMyRequests] = useState<Request[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   
   // Form fields
   const [title, setTitle] = useState("");
@@ -153,6 +154,11 @@ export default function Home() {
     setSubmitting(false);
   };
 
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
+
   // Show nothing while checking auth
   if (loading) {
     return (
@@ -205,6 +211,68 @@ export default function Home() {
         .logo span { color: #7ab87a; }
         .tagline {
           font-size: 0.95rem; color: #888; margin-top: 6px;
+        }
+
+        .user-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 16px;
+          background: #fff;
+          border-radius: 12px;
+          margin-bottom: 20px;
+          position: relative;
+        }
+        .user-info {
+          font-size: 0.88rem;
+          color: #666;
+        }
+        .user-menu-btn {
+          background: #f5f0e8;
+          border: 1.5px solid #e0d8cc;
+          padding: 8px 12px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 0.85rem;
+          font-weight: 500;
+          color: #2d4a2d;
+          transition: all 0.2s;
+        }
+        .user-menu-btn:hover {
+          background: #e8e0d4;
+        }
+        .user-dropdown {
+          position: absolute;
+          top: 100%;
+          right: 16px;
+          margin-top: 8px;
+          background: #fff;
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(45,74,45,0.15);
+          border: 1px solid #e0d8cc;
+          min-width: 200px;
+          z-index: 100;
+        }
+        .dropdown-item {
+          padding: 12px 16px;
+          border-bottom: 1px solid #f5f0e8;
+          cursor: pointer;
+          font-size: 0.88rem;
+          color: #2d4a2d;
+          transition: background 0.2s;
+        }
+        .dropdown-item:hover {
+          background: #f5f0e8;
+        }
+        .dropdown-item:last-child {
+          border-bottom: none;
+          border-radius: 0 0 12px 12px;
+        }
+        .dropdown-item:first-child {
+          border-radius: 12px 12px 0 0;
+        }
+        .dropdown-item.logout {
+          color: #dc3545;
         }
 
         .nav-links {
@@ -365,16 +433,6 @@ export default function Home() {
         
         .empty { text-align: center; padding: 40px 20px; color: #bbb; font-size: 0.9rem; }
         .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
-
-        .user-info {
-          text-align: center;
-          padding: 12px;
-          background: #fff;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          font-size: 0.88rem;
-          color: #666;
-        }
         
         .post-btn-wrapper {
           margin-bottom: 24px;
@@ -402,13 +460,36 @@ export default function Home() {
           <div className="tagline">Your neighborhood helping hands</div>
         </div>
 
-        <div className="user-info">
-          👤 {user?.user_metadata?.full_name || user?.email}
-        </div>
-
-        <div className="nav-links">
-          <a href="/directory" className="nav-link">🏪 Merchants</a>
-          {isTerritoryOwner && <a href="/owner" className="nav-link">📊 Dashboard</a>}
+        <div className="user-header">
+          <div className="user-info">
+            👤 {user?.user_metadata?.full_name || user?.email}
+          </div>
+          <button 
+            className="user-menu-btn" 
+            onClick={() => setShowUserMenu(!showUserMenu)}
+          >
+            Menu ▼
+          </button>
+          {showUserMenu && (
+            <div className="user-dropdown">
+              {isAdmin && (
+                <div className="dropdown-item" onClick={() => router.push('/admin')}>
+                  ⚙️ Admin Dashboard
+                </div>
+              )}
+              {isTerritoryOwner && (
+                <div className="dropdown-item" onClick={() => router.push('/owner')}>
+                  📊 Owner Dashboard
+                </div>
+              )}
+              <div className="dropdown-item" onClick={() => router.push('/directory')}>
+                🏪 Merchants
+              </div>
+              <div className="dropdown-item logout" onClick={handleLogout}>
+                🚪 Log Out
+              </div>
+            </div>
+          )}
         </div>
 
         {!showForm ? (
