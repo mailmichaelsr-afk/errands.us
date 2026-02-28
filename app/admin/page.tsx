@@ -1,4 +1,4 @@
-// app/admin/page.tsx (with Add User functionality)
+// app/admin/page.tsx (with Add User functionality and Merchant link)
 
 "use client";
 import { useEffect, useState } from "react";
@@ -223,7 +223,7 @@ export default function AdminDashboard() {
     if (!t.time_slot_days || !t.time_slot_start || !t.time_slot_end) return "24/7";
     
     const days = t.time_slot_days.map(d => DAY_LABELS[d]).join(', ');
-    const start = t.time_slot_start.slice(0, 5); // "HH:MM"
+    const start = t.time_slot_start.slice(0, 5);
     const end = t.time_slot_end.slice(0, 5);
     
     if (start === '00:00' && end === '23:59') return days;
@@ -249,6 +249,31 @@ export default function AdminDashboard() {
         .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
         .admin-badge { background: #2d4a2d; color: #f5f0e8; padding: 6px 14px; border-radius: 100px; font-size: 0.8rem; font-weight: 500; }
+        
+        .quick-links {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .quick-link {
+          flex: 1;
+          padding: 14px 20px;
+          background: #fff;
+          border: 1.5px solid #e0d8cc;
+          border-radius: 12px;
+          text-align: center;
+          text-decoration: none;
+          color: #2d4a2d;
+          font-size: 0.9rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          box-shadow: 0 2px 8px rgba(45,74,45,0.05);
+        }
+        .quick-link:hover {
+          border-color: #7ab87a;
+          background: #f0f7f0;
+          transform: translateY(-2px);
+        }
         
         .stats {
           display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -356,6 +381,12 @@ export default function AdminDashboard() {
             <div style={{ color: "#999", fontSize: "0.9rem", marginTop: 4 }}>Admin Dashboard</div>
           </div>
           <div className="admin-badge">👤 {user?.user_metadata?.full_name || user?.email}</div>
+        </div>
+
+        <div className="quick-links">
+          <a href="/admin/merchants" className="quick-link">
+            🏪 Manage Merchants
+          </a>
         </div>
 
         <div className="stats">
