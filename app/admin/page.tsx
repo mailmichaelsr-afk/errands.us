@@ -1,4 +1,4 @@
-// app/admin/page.tsx (with time-based territories)
+// app/admin/page.tsx (with Add User functionality)
 
 "use client";
 import { useEffect, useState } from "react";
@@ -68,6 +68,12 @@ export default function AdminDashboard() {
   const [newTimeDays, setNewTimeDays] = useState<string[]>(['mon','tue','wed','thu','fri','sat','sun']);
   const [newTimeStart, setNewTimeStart] = useState("00:00");
   const [newTimeEnd, setNewTimeEnd] = useState("23:59");
+  
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPhone, setNewUserPhone] = useState("");
+  const [newUserRole, setNewUserRole] = useState("territory_owner");
   
   const [loadingData, setLoadingData] = useState(true);
   const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
@@ -155,6 +161,28 @@ export default function AdminDashboard() {
     loadData();
   };
 
+  const createUser = async () => {
+    if (!newUserName || !newUserEmail) return;
+    
+    await fetch("/.netlify/functions/users-create-manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        full_name: newUserName,
+        email: newUserEmail,
+        phone: newUserPhone,
+        role: newUserRole,
+      }),
+    });
+    
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPhone("");
+    setNewUserRole("territory_owner");
+    setShowAddUser(false);
+    loadData();
+  };
+
   const approveUser = async (userId: number) => {
     await fetch("/.netlify/functions/users-update-status", {
       method: "POST",
@@ -205,6 +233,7 @@ export default function AdminDashboard() {
   if (loading || !isAdmin) return null;
 
   const pendingOwners = users.filter(u => u.role === "territory_owner" && u.status === "pending");
+  const activeOwners = users.filter(u => u.role === "territory_owner" && u.status === "active");
   const availableTerritories = territories.filter(t => t.status === "available");
   const soldTerritories = territories.filter(t => t.status === "sold");
   const pendingMerchants = merchants.filter(m => m.status === "pending");
@@ -458,7 +487,7 @@ export default function AdminDashboard() {
                     {t.price && ` • $${t.price}`}
                     {t.owner_name && ` • Owner: ${t.owner_name} (${t.owner_email})`}
                   </div>
-                  {t.status === "available" && pendingOwners.length > 0 && (
+                  {t.status === "available" && activeOwners.length > 0 && (
                     <div className="card-actions">
                       <select 
                         className="input" 
@@ -467,7 +496,7 @@ export default function AdminDashboard() {
                         onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}
                       >
                         <option value="">Assign to...</option>
-                        {pendingOwners.map(u => (
+                        {activeOwners.map(u => (
                           <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
                         ))}
                       </select>
@@ -488,6 +517,50 @@ export default function AdminDashboard() {
 
         {tab === "users" && (
           <>
+            <div className="section-head">
+              <span>All Users</span>
+              <button className="btn btn-primary" onClick={() => setShowAddUser(!showAddUser)}>
+                + Add User
+              </button>
+            </div>
+
+            {showAddUser && (
+              <div className="form-card">
+                <input
+                  className="input"
+                  placeholder="Full Name"
+                  value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                />
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="Email"
+                  value={newUserEmail}
+                  onChange={e => setNewUserEmail(e.target.value)}
+                />
+                <input
+                  className="input"
+                  placeholder="Phone (optional)"
+                  value={newUserPhone}
+                  onChange={e => setNewUserPhone(e.target.value)}
+                />
+                <select 
+                  className="input"
+                  value={newUserRole}
+                  onChange={e => setNewUserRole(e.target.value)}
+                >
+                  <option value="territory_owner">Territory Owner</option>
+                  <option value="customer">Customer</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                  <button className="btn btn-primary" onClick={createUser}>Create User</button>
+                  <button className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
             {pendingOwners.length > 0 && (
               <>
                 <div className="section-head">Pending Territory Owner Applications</div>
@@ -506,7 +579,6 @@ export default function AdminDashboard() {
               </>
             )}
 
-            <div className="section-head">All Users</div>
             {users.map(u => (
               <div key={u.id} className="card">
                 <div className="card-title">
