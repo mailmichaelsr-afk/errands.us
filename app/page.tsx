@@ -1,4 +1,4 @@
-// app/page.tsx (with user menu and navigation)
+// app/page.tsx (with user menu, navigation, and delete button)
 
 "use client";
 import { useEffect, useState } from "react";
@@ -152,6 +152,22 @@ export default function Home() {
       alert("❌ Failed to post request. Please try again.");
     }
     setSubmitting(false);
+  };
+
+  const deleteRequest = async (id: number, title: string) => {
+    if (!confirm(`Delete "${title}"?`)) return;
+    
+    try {
+      await fetch("/.netlify/functions/requests-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      load();
+    } catch (e) {
+      console.error("Delete failed:", e);
+      alert("Failed to delete request");
+    }
   };
 
   const handleLogout = () => {
@@ -373,6 +389,20 @@ export default function Home() {
         .btn-outline:hover {
           background: #2d4a2d; color: #f5f0e8;
         }
+        
+        .btn-danger {
+          background: #dc3545;
+          color: #fff;
+          border: none;
+          width: auto;
+        }
+        .btn-danger:hover {
+          background: #c82333;
+        }
+        .btn-small {
+          padding: 4px 8px;
+          font-size: 0.75rem;
+        }
 
         .req-list { display: flex; flex-direction: column; gap: 12px; }
         .req-item {
@@ -420,6 +450,11 @@ export default function Home() {
           font-size: 0.78rem; color: #999;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           max-width: 200px;
+        }
+        .card-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
         }
         .chat-btn {
           background: #2d4a2d; color: #f5f0e8;
@@ -753,15 +788,28 @@ export default function Home() {
                           <span style={{color: "#999"}}>No messages yet</span>
                         )}
                       </div>
-                      <button 
-                        className="chat-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/request/${r.id}`);
-                        }}
-                      >
-                        💬 Chat
-                      </button>
+                      <div className="card-actions">
+                        <button 
+                          className="chat-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/request/${r.id}`);
+                          }}
+                        >
+                          💬 Chat
+                        </button>
+                        {isAdmin && (
+                          <button 
+                            className="btn btn-danger btn-small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteRequest(r.id, r.title);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     {r.last_message && (
