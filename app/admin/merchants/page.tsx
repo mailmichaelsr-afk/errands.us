@@ -2,8 +2,6 @@
 
 "use client";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
 
 type Merchant = {
   id: number;
@@ -23,9 +21,6 @@ const CATEGORIES = [
 ];
 
 export default function MerchantsManager() {
-  const { user, isAdmin, loading } = useAuth();
-  const router = useRouter();
-  
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -39,12 +34,6 @@ export default function MerchantsManager() {
   
   const [loadingData, setLoadingData] = useState(true);
 
-  useEffect(() => {
-    if (!loading && !isAdmin) {
-      router.replace("/admin");
-    }
-  }, [user, isAdmin, loading, router]);
-
   const loadMerchants = async () => {
     setLoadingData(true);
     try {
@@ -57,8 +46,8 @@ export default function MerchantsManager() {
   };
 
   useEffect(() => {
-    if (isAdmin) loadMerchants();
-  }, [isAdmin]);
+    loadMerchants();
+  }, []);
 
   const openAdd = () => {
     setName("");
@@ -136,25 +125,6 @@ export default function MerchantsManager() {
     });
     loadMerchants();
   };
-
-  // Show loading state
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#f5f0e8",
-        fontFamily: "'DM Sans', sans-serif"
-      }}>
-        Loading...
-      </div>
-    );
-  }
-
-  // Redirect if not admin
-  if (!isAdmin) return null;
 
   const pending = merchants.filter(m => m.status === "pending");
   const approved = merchants.filter(m => m.status === "approved");
