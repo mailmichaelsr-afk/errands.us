@@ -1,4 +1,4 @@
-// netlify/functions/requests-create.js (v4 with time-based territory routing)
+// netlify/functions/requests-create.js (with structured addresses)
 
 import { neon } from "@neondatabase/serverless";
 
@@ -9,64 +9,55 @@ export async function handler(event) {
     const sql = neon(process.env.DATABASE_URL);
     const data = JSON.parse(event.body);
 
-    if (!data.title || !data.pickup || !data.dropoff) {
+    if (!data.title || !data.delivery_zip) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "title, pickup and dropoff are required" }),
+        body: JSON.stringify({ error: "title and delivery_zip are required" }),
       };
     }
 
-    // Extract zip code from dropoff address
-    const zipMatch = data.dropoff.match(/\b\d{5}\b/);
-    const dropoffZip = zipMatch ? zipMatch[0] : null;
+    const deliveryZip = data.delivery_zip.trim();
 
     let territoryId = null;
     let assignedTo = null;
 
-    if (dropoffZip) {
-      // Determine target time for routing
-      let targetTime;
-      let targetDay;
-      
-      if (data.pickup_time) {
-        // Use scheduled pickup time
-        const dt = new Date(data.pickup_time);
-        targetTime = dt.toTimeString().slice(0, 8); // "HH:MM:SS"
-        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][dt.getDay()];
-      } else if (data.pickup_flexibility === 'asap') {
-        // Use current time
-        const now = new Date();
-        targetTime = now.toTimeString().slice(0, 8);
-        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-      } else {
-        // Default to current time for flexible requests
-        const now = new Date();
-        targetTime = now.toTimeString().slice(0, 8);
-        targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-      }
+    // Determine target time for routing
+    let targetTime;
+    let targetDay;
+    
+    if (data.pickup_time) {
+      const dt = new Date(data.pickup_time);
+      targetTime = dt.toTimeString().slice(0, 8);
+      targetDay = ['sun','mon','tue','wed','thu','fri','sat'][dt.getDay()];
+    } else if (data.pickup_flexibility === 'asap') {
+      const now = new Date();
+      targetTime = now.toTimeString().slice(0, 8);
+      targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+    } else {
+      const now = new Date();
+      targetTime = now.toTimeString().slice(0, 8);
+      targetDay = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+    }
 
-      // Find territory that covers this zip + time slot
-      const territories = await sql`
-        SELECT id, owner_id, name
-        FROM territories
-        WHERE status = 'sold'
-          AND ${dropoffZip} = ANY(zip_codes)
-          AND time_in_slot(
-            ${targetDay},
-            ${targetTime}::TIME,
-            time_slot_days,
-            time_slot_start,
-            time_slot_end
-          )
-        LIMIT 1
-      `;
+    // Find territory that covers this zip + time slot
+    const territories = await sql`
+      SELECT id, owner_id, name
+      FROM territories
+      WHERE status = 'sold'
+        AND ${deliveryZip} = ANY(zip_codes)
+        AND time_in_slot(
+          ${targetDay},
+          ${targetTime}::TIME,
+          time_slot_days,
+          time_slot_start,
+          time_slot_end
+        )
+      LIMIT 1
+    `;
 
-      if (territories.length > 0) {
-        territoryId = territories[0].id;
-        assignedTo = territories[0].owner_id;
-        
-        console.log(`Routed to territory: ${territories[0].name} (${targetDay} ${targetTime})`);
-      }
+    if (territories.length > 0) {
+      territoryId = territories[0].id;
+      assignedTo = territories[0].owner_id;
     }
 
     // If no territory found, assign to admin
@@ -79,19 +70,45 @@ export async function handler(event) {
       }
     }
 
+    // Build display strings from structured data
+    const pickupDisplay = [
+      data.pickup_street,
+      data.pickup_city,
+      data.pickup_state,
+      data.pickup_zip
+    ].filter(Boolean).join(', ');
+
+    const deliveryDisplay = [
+      data.delivery_street,
+      data.delivery_city,
+      data.delivery_state,
+      data.delivery_zip
+    ].filter(Boolean).join(', ');
+
     const result = await sql`
       INSERT INTO requests
-        (title, description, pickup, dropoff, status, 
-         customer_id, territory_id, assigned_to, created_at,
+        (title, description, 
+         pickup, dropoff,
+         pickup_street, pickup_city, pickup_state, pickup_zip,
+         delivery_street, delivery_city, delivery_state, delivery_zip,
+         status, customer_id, territory_id, assigned_to, created_at,
          pickup_time, pickup_flexibility, delivery_time, delivery_flexibility,
          offered_amount, payment_method, payment_notes)
       VALUES
         (${data.title},
          ${data.description || null},
-         ${data.pickup},
-         ${data.dropoff},
+         ${pickupDisplay},
+         ${deliveryDisplay},
+         ${data.pickup_street || null},
+         ${data.pickup_city || null},
+         ${data.pickup_state || null},
+         ${data.pickup_zip || null},
+         ${data.delivery_street || null},
+         ${data.delivery_city || null},
+         ${data.delivery_state || null},
+         ${deliveryZip},
          'open',
-         ${data.customer_id || data.created_by || null},
+         ${data.customer_id || null},
          ${territoryId},
          ${assignedTo},
          NOW(),
@@ -110,7 +127,7 @@ export async function handler(event) {
       await sql`
         INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, created_at)
         VALUES (${assignedTo}, 'request_routed', 'request', ${result[0].id},
-                jsonb_build_object('territory_id', ${territoryId}, 'zip', ${dropoffZip}), NOW())
+                jsonb_build_object('territory_id', ${territoryId}, 'zip', ${deliveryZip}), NOW())
       `;
     }
 
