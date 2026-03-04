@@ -14,6 +14,7 @@ type Merchant = {
   city?: string;
   state?: string;
   zip?: string;
+  status?: string;
   link_id?: number;
 };
 
