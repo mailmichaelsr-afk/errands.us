@@ -1,4 +1,4 @@
-// app/page.tsx (with user menu, navigation, and delete button)
+// app/page.tsx - Complete with structured addresses and merchant dropdown
 
 "use client";
 import { useEffect, useState } from "react";
@@ -20,6 +20,23 @@ type Request = {
   last_message?: string;
 };
 
+type Merchant = {
+  id: number;
+  name: string;
+  category: string;
+  address: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+};
+
+const US_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY',
+  'LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+  'OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
+];
+
 export default function Home() {
   const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
   const router = useRouter();
@@ -31,8 +48,14 @@ export default function Home() {
   
   // Form fields
   const [title, setTitle] = useState("");
-  const [pickup, setPickup] = useState("");
-  const [dropoff, setDropoff] = useState("");
+  const [pickupStreet, setPickupStreet] = useState("");
+  const [pickupCity, setPickupCity] = useState("");
+  const [pickupState, setPickupState] = useState("");
+  const [pickupZip, setPickupZip] = useState("");
+  const [deliveryStreet, setDeliveryStreet] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryState, setDeliveryState] = useState("");
+  const [deliveryZip, setDeliveryZip] = useState("");
   const [pickupFlexibility, setPickupFlexibility] = useState("flexible");
   const [pickupTime, setPickupTime] = useState("");
   const [deliveryFlexibility, setDeliveryFlexibility] = useState("flexible");
@@ -42,6 +65,12 @@ export default function Home() {
   const [paymentNotes, setPaymentNotes] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   
+  // Merchant selection
+  const [selectedMerchant, setSelectedMerchant] = useState<number | null>(null);
+  const [availableMerchants, setAvailableMerchants] = useState<Merchant[]>([]);
+  const [useCustomPickup, setUseCustomPickup] = useState(false);
+  const [territory, setTerritory] = useState<any>(null);
+  
   const [submitting, setSubmitting] = useState(false);
 
   // Redirect to login if not authenticated
@@ -50,6 +79,43 @@ export default function Home() {
       router.push("/login");
     }
   }, [user, loading, router]);
+
+  // Fetch merchants when delivery ZIP changes
+  useEffect(() => {
+    const fetchMerchants = async () => {
+      if (deliveryZip.length === 5) {
+        try {
+          const res = await fetch(`/.netlify/functions/merchants-by-zip?zip=${deliveryZip}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTerritory(data.territory);
+            setAvailableMerchants(data.merchants);
+          }
+        } catch (e) {
+          console.error("Failed to load merchants:", e);
+        }
+      } else {
+        setAvailableMerchants([]);
+        setTerritory(null);
+      }
+    };
+    
+    fetchMerchants();
+  }, [deliveryZip]);
+
+  // Auto-fill pickup address when merchant selected
+  useEffect(() => {
+    if (selectedMerchant && availableMerchants.length > 0) {
+      const merchant = availableMerchants.find(m => m.id === selectedMerchant);
+      if (merchant) {
+        setPickupStreet(merchant.street || "");
+        setPickupCity(merchant.city || "");
+        setPickupState(merchant.state || "");
+        setPickupZip(merchant.zip || "");
+        setUseCustomPickup(false);
+      }
+    }
+  }, [selectedMerchant, availableMerchants]);
 
   const load = async () => {
     try {
@@ -93,7 +159,6 @@ export default function Home() {
   useEffect(() => {
     if (user) {
       load();
-      // Refresh every 10 seconds to check for new messages
       const interval = setInterval(load, 10000);
       return () => clearInterval(interval);
     }
@@ -101,7 +166,10 @@ export default function Home() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !pickup || !dropoff) return;
+    if (!title || !deliveryZip) {
+      alert("Title and delivery ZIP code are required");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -109,10 +177,17 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          title, 
-          pickup, 
-          dropoff,
+          title,
+          description: "",
           customer_id: dbUserId,
+          pickup_street: pickupStreet,
+          pickup_city: pickupCity,
+          pickup_state: pickupState,
+          pickup_zip: pickupZip,
+          delivery_street: deliveryStreet,
+          delivery_city: deliveryCity,
+          delivery_state: deliveryState,
+          delivery_zip: deliveryZip,
           pickup_time: pickupTime || null,
           pickup_flexibility: pickupFlexibility,
           delivery_time: deliveryTime || null,
@@ -128,19 +203,25 @@ export default function Home() {
         
         // Clear form
         setTitle("");
-        setPickup("");
-        setDropoff("");
+        setPickupStreet("");
+        setPickupCity("");
+        setPickupState("");
+        setPickupZip("");
+        setDeliveryStreet("");
+        setDeliveryCity("");
+        setDeliveryState("");
+        setDeliveryZip("");
         setPickupTime("");
         setDeliveryTime("");
         setOfferedAmount("");
         setPaymentNotes("");
+        setSelectedMerchant(null);
+        setUseCustomPickup(false);
         setShowDetails(false);
         setShowForm(false);
         
-        // Reload
         await load();
         
-        // Show success and open the request
         if (confirm("✅ Request posted! Click OK to view and chat with your territory owner.")) {
           router.push(`/request/${newRequest.id}`);
         }
@@ -175,7 +256,6 @@ export default function Home() {
     router.push("/login");
   };
 
-  // Show nothing while checking auth
   if (loading) {
     return (
       <div style={{
@@ -191,12 +271,10 @@ export default function Home() {
     );
   }
 
-  // Don't render anything if not logged in (will redirect)
   if (!user) return null;
 
   const displayRequests = isTerritoryOwner ? allRequests : myRequests;
 
-  // Get status display info
   const getStatusInfo = (status: string) => {
     const info: Record<string, { label: string; color: string; bg: string }> = {
       open: { label: "🟢 Open", color: "#2d6a2d", bg: "#d4f0d4" },
@@ -220,109 +298,53 @@ export default function Home() {
           font-family: 'DM Sans', sans-serif;
         }
         .page { max-width: 640px; margin: 0 auto; padding: 28px 20px 80px; }
-        .hero {
-          text-align: center; margin-bottom: 32px;
-        }
+        .hero { text-align: center; margin-bottom: 32px; }
         .logo { font-family: 'Fraunces', serif; font-size: 2.2rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
-        .tagline {
-          font-size: 0.95rem; color: #888; margin-top: 6px;
-        }
+        .tagline { font-size: 0.95rem; color: #888; margin-top: 6px; }
 
         .user-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 12px 16px;
-          background: #fff;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          position: relative;
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 16px; background: #fff; border-radius: 12px;
+          margin-bottom: 20px; position: relative;
         }
-        .user-info {
-          font-size: 0.88rem;
-          color: #666;
-        }
+        .user-info { font-size: 0.88rem; color: #666; }
         .user-menu-btn {
-          background: #f5f0e8;
-          border: 1.5px solid #e0d8cc;
-          padding: 8px 12px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 0.85rem;
-          font-weight: 500;
-          color: #2d4a2d;
+          background: #f5f0e8; border: 1.5px solid #e0d8cc;
+          padding: 8px 12px; border-radius: 8px; cursor: pointer;
+          font-size: 0.85rem; font-weight: 500; color: #2d4a2d;
           transition: all 0.2s;
         }
-        .user-menu-btn:hover {
-          background: #e8e0d4;
-        }
+        .user-menu-btn:hover { background: #e8e0d4; }
         .user-dropdown {
-          position: absolute;
-          top: 100%;
-          right: 16px;
-          margin-top: 8px;
-          background: #fff;
-          border-radius: 12px;
+          position: absolute; top: 100%; right: 16px; margin-top: 8px;
+          background: #fff; border-radius: 12px;
           box-shadow: 0 4px 20px rgba(45,74,45,0.15);
-          border: 1px solid #e0d8cc;
-          min-width: 200px;
-          z-index: 100;
+          border: 1px solid #e0d8cc; min-width: 200px; z-index: 100;
         }
         .dropdown-item {
-          padding: 12px 16px;
-          border-bottom: 1px solid #f5f0e8;
-          cursor: pointer;
-          font-size: 0.88rem;
-          color: #2d4a2d;
+          padding: 12px 16px; border-bottom: 1px solid #f5f0e8;
+          cursor: pointer; font-size: 0.88rem; color: #2d4a2d;
           transition: background 0.2s;
         }
-        .dropdown-item:hover {
-          background: #f5f0e8;
-        }
-        .dropdown-item:last-child {
-          border-bottom: none;
-          border-radius: 0 0 12px 12px;
-        }
-        .dropdown-item:first-child {
-          border-radius: 12px 12px 0 0;
-        }
-        .dropdown-item.logout {
-          color: #dc3545;
-        }
-
-        .nav-links {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-        .nav-link {
-          flex: 1;
-          padding: 10px;
-          background: #fff;
-          border: 1.5px solid #e0d8cc;
-          border-radius: 10px;
-          text-align: center;
-          text-decoration: none;
-          color: #2d4a2d;
-          font-size: 0.88rem;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        .nav-link:hover {
-          border-color: #7ab87a;
-          background: #f0f7f0;
-        }
+        .dropdown-item:hover { background: #f5f0e8; }
+        .dropdown-item:last-child { border-bottom: none; border-radius: 0 0 12px 12px; }
+        .dropdown-item:first-child { border-radius: 12px 12px 0 0; }
+        .dropdown-item.logout { color: #dc3545; }
 
         .card {
           background: #fff; border-radius: 16px; padding: 24px;
-          margin-bottom: 24px;
-          box-shadow: 0 2px 12px rgba(45,74,45,0.07);
+          margin-bottom: 24px; box-shadow: 0 2px 12px rgba(45,74,45,0.07);
           border: 1px solid rgba(45,74,45,0.05);
         }
         .card-title {
           font-family: 'Fraunces', serif; font-size: 1.2rem;
           color: #2d4a2d; margin-bottom: 16px; font-weight: 600;
+        }
+        .section-label {
+          font-family: 'Fraunces', serif; font-size: 1rem;
+          font-weight: 600; color: #2d4a2d; margin: 20px 0 12px;
+          padding-top: 16px; border-top: 1px solid #e8e0d4;
         }
         .form-group { margin-bottom: 14px; }
         .label {
@@ -336,10 +358,7 @@ export default function Home() {
           background: #faf8f4; color: #1a1a1a; outline: none;
           transition: border-color 0.2s, background 0.2s;
         }
-        .input:focus, .select:focus {
-          border-color: #7ab87a;
-          background: #fff;
-        }
+        .input:focus, .select:focus { border-color: #7ab87a; background: #fff; }
         .input::placeholder { color: #bbb; }
         .textarea {
           width: 100%; padding: 12px 14px;
@@ -348,14 +367,9 @@ export default function Home() {
           background: #faf8f4; color: #1a1a1a; outline: none;
           min-height: 80px; resize: vertical;
         }
-        .textarea:focus {
-          border-color: #7ab87a;
-          background: #fff;
-        }
+        .textarea:focus { border-color: #7ab87a; background: #fff; }
         
-        .radio-group {
-          display: flex; gap: 12px; flex-wrap: wrap;
-        }
+        .radio-group { display: flex; gap: 12px; flex-wrap: wrap; }
         .radio-label {
           display: flex; align-items: center; gap: 6px;
           font-size: 0.88rem; color: #555; cursor: pointer;
@@ -367,9 +381,7 @@ export default function Home() {
           cursor: pointer; font-size: 0.88rem; color: #666;
           transition: all 0.2s; margin-bottom: 14px;
         }
-        .toggle-details:hover {
-          background: #e8e0d4; border-color: #7ab87a;
-        }
+        .toggle-details:hover { background: #e8e0d4; border-color: #7ab87a; }
         
         .btn {
           width: 100%; padding: 13px; border-radius: 12px;
@@ -383,43 +395,39 @@ export default function Home() {
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .btn-outline {
-          background: #fff; color: #2d4a2d;
-          border: 1.5px solid #2d4a2d;
+          background: #fff; color: #2d4a2d; border: 1.5px solid #2d4a2d;
         }
-        .btn-outline:hover {
-          background: #2d4a2d; color: #f5f0e8;
-        }
+        .btn-outline:hover { background: #2d4a2d; color: #f5f0e8; }
         
         .btn-danger {
-          background: #dc3545;
-          color: #fff;
-          border: none;
-          width: auto;
+          background: #dc3545; color: #fff; border: none; width: auto;
         }
-        .btn-danger:hover {
-          background: #c82333;
+        .btn-danger:hover { background: #c82333; }
+        .btn-small { padding: 4px 8px; font-size: 0.75rem; }
+
+        .alert {
+          padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
         }
-        .btn-small {
-          padding: 4px 8px;
-          font-size: 0.75rem;
+        .alert-warning { background: #fff0e6; color: #c67700; }
+        .alert-error { background: #ffe0e0; color: #c00; }
+
+        .link-btn {
+          background: none; border: none; color: #7ab87a;
+          font-size: 0.85rem; cursor: pointer; text-decoration: underline;
+          padding: 0; margin: 12px 0; display: block; text-align: center;
         }
 
         .req-list { display: flex; flex-direction: column; gap: 12px; }
         .req-item {
           background: #faf8f4; padding: 16px; border-radius: 12px;
-          border: 1px solid #e8e0d4;
-          transition: all 0.2s;
-          cursor: pointer;
-          position: relative;
+          border: 1px solid #e8e0d4; transition: all 0.2s;
+          cursor: pointer; position: relative;
         }
         .req-item:hover {
-          background: #fff;
-          box-shadow: 0 4px 12px rgba(45,74,45,0.08);
+          background: #fff; box-shadow: 0 4px 12px rgba(45,74,45,0.08);
           transform: translateY(-2px);
         }
-        .req-item.has-messages {
-          border-left: 3px solid #7ab87a;
-        }
+        .req-item.has-messages { border-left: 3px solid #7ab87a; }
         .req-top {
           display: flex; justify-content: space-between;
           align-items: flex-start; margin-bottom: 6px; gap: 8px;
@@ -446,47 +454,24 @@ export default function Home() {
           display: flex; align-items: center; justify-content: center;
           font-size: 0.7rem; font-weight: 600;
         }
-        .last-message {
-          font-size: 0.78rem; color: #999;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          max-width: 200px;
-        }
-        .card-actions {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
+        .card-actions { display: flex; gap: 8px; align-items: center; }
         .chat-btn {
           background: #2d4a2d; color: #f5f0e8;
           padding: 6px 12px; border-radius: 8px;
           font-size: 0.8rem; border: none;
           cursor: pointer; transition: all 0.2s;
         }
-        .chat-btn:hover {
-          background: #3d6b3d;
-        }
+        .chat-btn:hover { background: #3d6b3d; }
         
         .empty { text-align: center; padding: 40px 20px; color: #bbb; font-size: 0.9rem; }
         .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
-        
-        .post-btn-wrapper {
-          margin-bottom: 24px;
-        }
-
+        .post-btn-wrapper { margin-bottom: 24px; }
         .tip-box {
-          background: #f0f7f0;
-          border: 1.5px solid #7ab87a;
-          border-radius: 12px;
-          padding: 14px;
-          margin-bottom: 20px;
-          font-size: 0.88rem;
-          color: #2d4a2d;
-          line-height: 1.5;
+          background: #f0f7f0; border: 1.5px solid #7ab87a;
+          border-radius: 12px; padding: 14px; margin-bottom: 20px;
+          font-size: 0.88rem; color: #2d4a2d; line-height: 1.5;
         }
-        .tip-icon {
-          font-size: 1.2rem;
-          margin-right: 6px;
-        }
+        .tip-icon { font-size: 1.2rem; margin-right: 6px; }
       `}</style>
 
       <div className="page">
@@ -499,10 +484,7 @@ export default function Home() {
           <div className="user-info">
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
-          <button 
-            className="user-menu-btn" 
-            onClick={() => setShowUserMenu(!showUserMenu)}
-          >
+          <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
             Menu ▼
           </button>
           {showUserMenu && (
@@ -539,39 +521,128 @@ export default function Home() {
             <form onSubmit={submit}>
               <div className="form-group">
                 <label className="label">What do you need?</label>
-                <input
-                  className="input"
-                  placeholder="e.g. Pick up prescription from CVS"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="label">Pickup from</label>
-                <input
-                  className="input"
-                  placeholder="Store name or address with zip code"
-                  value={pickup}
-                  onChange={e => setPickup(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="label">Deliver to</label>
-                <input
-                  className="input"
-                  placeholder="Your address"
-                  value={dropoff}
-                  onChange={e => setDropoff(e.target.value)}
-                  required
-                />
+                <input className="input" placeholder="e.g. Pick up prescription from CVS"
+                  value={title} onChange={e => setTitle(e.target.value)} required />
               </div>
 
-              <div 
-                className="toggle-details" 
-                onClick={() => setShowDetails(!showDetails)}
-              >
+              <div className="section-label">Delivery Address (Required First)</div>
+              <div className="form-group">
+                <label className="label">Street Address *</label>
+                <input className="input" placeholder="456 Oak Ave"
+                  value={deliveryStreet}
+                  onChange={e => setDeliveryStreet(e.target.value)} required />
+              </div>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
+                <div className="form-group">
+                  <label className="label">City *</label>
+                  <input className="input" placeholder="Oconto"
+                    value={deliveryCity}
+                    onChange={e => setDeliveryCity(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">State *</label>
+                  <select className="select" value={deliveryState}
+                    onChange={e => setDeliveryState(e.target.value)} required>
+                    <option value="">Select...</option>
+                    {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="label">ZIP Code *</label>
+                <input className="input" placeholder="54153" maxLength={5}
+                  pattern="[0-9]{5}" value={deliveryZip}
+                  onChange={e => setDeliveryZip(e.target.value.replace(/\D/g, '').slice(0,5))}
+                  required />
+              </div>
+
+              <div className="section-label">Pickup Location</div>
+
+              {deliveryZip.length !== 5 && (
+                <div className="alert alert-warning">
+                  Enter your delivery ZIP code first to see available merchants
+                </div>
+              )}
+
+              {deliveryZip.length === 5 && !territory && (
+                <div className="alert alert-error">
+                  No service available in ZIP {deliveryZip} at this time
+                </div>
+              )}
+
+              {deliveryZip.length === 5 && territory && availableMerchants.length === 0 && (
+                <div className="alert alert-warning">
+                  No merchants available for this territory yet. Use custom address below.
+                </div>
+              )}
+
+              {availableMerchants.length > 0 && !useCustomPickup && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Select Merchant</label>
+                    <select className="select" value={selectedMerchant || ""}
+                      onChange={e => setSelectedMerchant(e.target.value ? parseInt(e.target.value) : null)}>
+                      <option value="">Choose a merchant...</option>
+                      {availableMerchants.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} - {m.address}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="button" className="link-btn"
+                    onClick={() => setUseCustomPickup(true)}>
+                    Or enter custom pickup address
+                  </button>
+                </>
+              )}
+
+              {(useCustomPickup || availableMerchants.length === 0) && (
+                <>
+                  {availableMerchants.length > 0 && (
+                    <button type="button" className="link-btn"
+                      onClick={() => {
+                        setUseCustomPickup(false);
+                        setPickupStreet("");
+                        setPickupCity("");
+                        setPickupState("");
+                        setPickupZip("");
+                      }}>
+                      ← Back to merchant list
+                    </button>
+                  )}
+                  <div className="form-group">
+                    <label className="label">Street Address</label>
+                    <input className="input" placeholder="123 Main St"
+                      value={pickupStreet}
+                      onChange={e => setPickupStreet(e.target.value)} />
+                  </div>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
+                    <div className="form-group">
+                      <label className="label">City</label>
+                      <input className="input" placeholder="Madison"
+                        value={pickupCity}
+                        onChange={e => setPickupCity(e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="label">State</label>
+                      <select className="select" value={pickupState}
+                        onChange={e => setPickupState(e.target.value)}>
+                        <option value="">Select...</option>
+                        {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="label">ZIP Code</label>
+                    <input className="input" placeholder="54153" maxLength={5}
+                      value={pickupZip}
+                      onChange={e => setPickupZip(e.target.value.replace(/\D/g, '').slice(0,5))} />
+                  </div>
+                </>
+              )}
+
+              <div className="toggle-details" onClick={() => setShowDetails(!showDetails)}>
                 {showDetails ? "▼" : "▶"} Add timing, cost & payment details
               </div>
 
@@ -581,33 +652,21 @@ export default function Home() {
                     <label className="label">Pickup timing</label>
                     <div className="radio-group">
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="pickupFlex" 
-                          value="asap"
+                        <input type="radio" name="pickupFlex" value="asap"
                           checked={pickupFlexibility === "asap"}
-                          onChange={e => setPickupFlexibility(e.target.value)}
-                        />
+                          onChange={e => setPickupFlexibility(e.target.value)} />
                         ASAP
                       </label>
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="pickupFlex" 
-                          value="flexible"
+                        <input type="radio" name="pickupFlex" value="flexible"
                           checked={pickupFlexibility === "flexible"}
-                          onChange={e => setPickupFlexibility(e.target.value)}
-                        />
+                          onChange={e => setPickupFlexibility(e.target.value)} />
                         Flexible
                       </label>
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="pickupFlex" 
-                          value="scheduled"
+                        <input type="radio" name="pickupFlex" value="scheduled"
                           checked={pickupFlexibility === "scheduled"}
-                          onChange={e => setPickupFlexibility(e.target.value)}
-                        />
+                          onChange={e => setPickupFlexibility(e.target.value)} />
                         Scheduled
                       </label>
                     </div>
@@ -616,12 +675,9 @@ export default function Home() {
                   {pickupFlexibility === "scheduled" && (
                     <div className="form-group">
                       <label className="label">Pickup time</label>
-                      <input
-                        className="input"
-                        type="datetime-local"
+                      <input className="input" type="datetime-local"
                         value={pickupTime}
-                        onChange={e => setPickupTime(e.target.value)}
-                      />
+                        onChange={e => setPickupTime(e.target.value)} />
                     </div>
                   )}
 
@@ -629,33 +685,21 @@ export default function Home() {
                     <label className="label">Delivery timing</label>
                     <div className="radio-group">
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="deliveryFlex" 
-                          value="asap"
+                        <input type="radio" name="deliveryFlex" value="asap"
                           checked={deliveryFlexibility === "asap"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)}
-                        />
+                          onChange={e => setDeliveryFlexibility(e.target.value)} />
                         ASAP
                       </label>
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="deliveryFlex" 
-                          value="flexible"
+                        <input type="radio" name="deliveryFlex" value="flexible"
                           checked={deliveryFlexibility === "flexible"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)}
-                        />
+                          onChange={e => setDeliveryFlexibility(e.target.value)} />
                         Flexible
                       </label>
                       <label className="radio-label">
-                        <input 
-                          type="radio" 
-                          name="deliveryFlex" 
-                          value="scheduled"
+                        <input type="radio" name="deliveryFlex" value="scheduled"
                           checked={deliveryFlexibility === "scheduled"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)}
-                        />
+                          onChange={e => setDeliveryFlexibility(e.target.value)} />
                         By specific time
                       </label>
                     </div>
@@ -664,34 +708,23 @@ export default function Home() {
                   {deliveryFlexibility === "scheduled" && (
                     <div className="form-group">
                       <label className="label">Deliver by</label>
-                      <input
-                        className="input"
-                        type="datetime-local"
+                      <input className="input" type="datetime-local"
                         value={deliveryTime}
-                        onChange={e => setDeliveryTime(e.target.value)}
-                      />
+                        onChange={e => setDeliveryTime(e.target.value)} />
                     </div>
                   )}
 
                   <div className="form-group">
                     <label className="label">How much will you pay?</label>
-                    <input
-                      className="input"
-                      type="number"
-                      step="0.01"
-                      placeholder="15.00"
+                    <input className="input" type="number" step="0.01" placeholder="15.00"
                       value={offeredAmount}
-                      onChange={e => setOfferedAmount(e.target.value)}
-                    />
+                      onChange={e => setOfferedAmount(e.target.value)} />
                   </div>
 
                   <div className="form-group">
                     <label className="label">Payment method</label>
-                    <select 
-                      className="select"
-                      value={paymentMethod}
-                      onChange={e => setPaymentMethod(e.target.value)}
-                    >
+                    <select className="select" value={paymentMethod}
+                      onChange={e => setPaymentMethod(e.target.value)}>
                       <option>Cash</option>
                       <option>Venmo</option>
                       <option>Zelle</option>
@@ -704,12 +737,10 @@ export default function Home() {
 
                   <div className="form-group">
                     <label className="label">Payment notes (optional)</label>
-                    <textarea
-                      className="textarea"
+                    <textarea className="textarea"
                       placeholder="e.g. Venmo @username, or any special instructions"
                       value={paymentNotes}
-                      onChange={e => setPaymentNotes(e.target.value)}
-                    />
+                      onChange={e => setPaymentNotes(e.target.value)} />
                   </div>
                 </>
               )}
@@ -718,12 +749,8 @@ export default function Home() {
                 <button type="submit" className="btn" disabled={submitting} style={{flex: 1}}>
                   {submitting ? "Posting..." : "Post Request"}
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-outline" 
-                  onClick={() => setShowForm(false)}
-                  style={{flex: 1}}
-                >
+                <button type="button" className="btn btn-outline" 
+                  onClick={() => setShowForm(false)} style={{flex: 1}}>
                   Cancel
                 </button>
               </div>
@@ -754,17 +781,13 @@ export default function Home() {
                 const hasMessages = (r.message_count || 0) > 0;
                 
                 return (
-                  <div
-                    key={r.id}
+                  <div key={r.id}
                     className={`req-item ${hasMessages ? 'has-messages' : ''}`}
-                    onClick={() => router.push(`/request/${r.id}`)}
-                  >
+                    onClick={() => router.push(`/request/${r.id}`)}>
                     <div className="req-top">
                       <div className="req-title">{r.title}</div>
-                      <div 
-                        className="req-status" 
-                        style={{ background: statusInfo.bg, color: statusInfo.color }}
-                      >
+                      <div className="req-status" 
+                        style={{ background: statusInfo.bg, color: statusInfo.color }}>
                         {statusInfo.label}
                       </div>
                     </div>
@@ -789,34 +812,24 @@ export default function Home() {
                         )}
                       </div>
                       <div className="card-actions">
-                        <button 
-                          className="chat-btn"
+                        <button className="chat-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/request/${r.id}`);
-                          }}
-                        >
+                          }}>
                           💬 Chat
                         </button>
                         {isAdmin && (
-                          <button 
-                            className="btn btn-danger btn-small"
+                          <button className="btn btn-danger btn-small"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteRequest(r.id, r.title);
-                            }}
-                          >
+                            }}>
                             Delete
                           </button>
                         )}
                       </div>
                     </div>
-                    
-                    {r.last_message && (
-                      <div className="last-message">
-                        Last: {r.last_message}
-                      </div>
-                    )}
                   </div>
                 );
               })}
