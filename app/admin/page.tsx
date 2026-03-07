@@ -383,11 +383,19 @@ export default function AdminDashboard() {
           <div className="admin-badge">👤 {user?.user_metadata?.full_name || user?.email}</div>
         </div>
 
+
+
         <div className="quick-links">
-          <a href="/admin/merchants" className="quick-link">
-            🏪 Manage Merchants
-          </a>
-        </div>
+  <a href="/admin/territories" className="quick-link">
+    🗺️ Manage Territories
+  </a>
+  <a href="/admin/merchants" className="quick-link">
+    🏪 Manage Merchants
+  </a>
+</div>
+
+
+        
 
         <div className="stats">
           <div className="stat-card">
