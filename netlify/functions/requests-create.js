@@ -1,4 +1,4 @@
-// netlify/functions/requests-create.js - FINAL with proper routing logic
+// netlify/functions/requests-create.js - Routes by ZIP + TIME SLOT
 
 import { neon } from "@neondatabase/serverless";
 
@@ -24,28 +24,39 @@ export async function handler(event) {
       data.delivery_zip
     ].filter(Boolean).join(", ");
 
-    // Find territory by delivery ZIP
+    // Find territory by delivery ZIP + current time slot
     let territory = null;
     let assignedTo = null;
 
     if (data.delivery_zip) {
+      // Get current day and time
+      const now = new Date();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const currentDay = dayNames[now.getDay()];
+      const currentTime = now.toTimeString().slice(0, 8); // HH:MM:SS
+
+      // Find territory that matches ZIP, has this day, and is within time range
       const territoryResult = await sql`
-        SELECT id, owner_id, status
+        SELECT id, owner_id, status, name
         FROM territories
         WHERE ${data.delivery_zip} = ANY(zip_codes)
+          AND ${currentDay} = ANY(time_slot_days)
+          AND time_slot_start <= ${currentTime}::time
+          AND time_slot_end >= ${currentTime}::time
+          AND status = 'sold'
         LIMIT 1
       `;
 
       if (territoryResult.length > 0) {
         territory = territoryResult[0];
         
-        // Only auto-assign if territory has an owner (is claimed)
-        if (territory.owner_id && territory.status === 'sold') {
+        // Auto-assign to territory owner
+        if (territory.owner_id) {
           assignedTo = territory.owner_id;
         }
-        // If territory exists but no owner (available), leave assigned_to null
-        // so all independent drivers can see it
       }
+      // If no matching territory found, assigned_to stays null
+      // so all independent drivers can see it
     }
 
     // Create request
