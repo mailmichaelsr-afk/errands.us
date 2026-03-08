@@ -1,5 +1,3 @@
-// app/signup/customer/page.tsx - FINAL with driver link
-
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -12,20 +10,29 @@ export default function CustomerSignup() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [identity, setIdentity] = useState<any>(null);
   const router = useRouter();
   const { user } = useAuth();
 
   useEffect(() => {
     if (user) router.replace("/");
-  }, [user]);
+  }, [user, router]);
 
-  useEffect(() => {
-    import("netlify-identity-widget").then((mod) => {
-      const ni = mod.default;
-      ni.init({ logo: false });
-      setIdentity(ni);
-      ni.on("login", async (u: any) => {
+  const submit = async () => {
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Name, email, and password are required.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    
+    try {
+      const netlifyIdentity = await import("netlify-identity-widget");
+      const identity = netlifyIdentity.default;
+      
+      identity.init({ logo: false });
+      
+      // Set up one-time login handler
+      const handleLogin = async (u: any) => {
         try {
           await fetch("/.netlify/functions/users-create", {
             method: "POST",
@@ -38,32 +45,27 @@ export default function CustomerSignup() {
               role: "customer",
             }),
           });
+          router.replace("/");
         } catch (e) {
           console.error("Failed to create user record:", e);
+          setError("Account created but failed to save details. Please contact support.");
         }
-        router.replace("/");
-      });
-    });
-  }, [name, phone]);
-
-  const submit = async () => {
-    if (!name.trim() || !email.trim() || !password) {
-      setError("Name, email, and password are required.");
-      return;
-    }
-    if (!identity) {
-      setError("Loading... please wait a moment and try again.");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    try {
+      };
+      
+      identity.on("login", handleLogin);
+      
+      // Attempt signup
+      identity.open("signup");
+      identity.close(); // Close the widget UI
+      
       await identity.signup(email.trim(), password, {
         full_name: name.trim(),
         phone: phone.trim(),
         role: "customer",
       });
+      
     } catch (e: any) {
+      console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
     }
