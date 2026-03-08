@@ -1,4 +1,4 @@
-// app/signup/customer/page.tsx
+// app/signup/customer/page.tsx - FINAL with driver link
 
 "use client";
 import { useState, useEffect } from "react";
@@ -110,6 +110,14 @@ export default function CustomerSignup() {
         .footer { text-align: center; margin-top: 20px; font-size: 0.88rem; color: #999; }
         .footer a { color: #7ab87a; text-decoration: none; font-weight: 500; }
         .footer a:hover { text-decoration: underline; }
+        .divider { height: 1px; background: #e0d8cc; margin: 20px 0; }
+        .driver-cta {
+          background: #f0f7f0; padding: 16px; border-radius: 10px;
+          text-align: center; margin-top: 20px;
+        }
+        .driver-cta-title { font-weight: 600; color: #2d4a2d; margin-bottom: 8px; }
+        .driver-cta a { color: #7ab87a; font-weight: 500; text-decoration: none; }
+        .driver-cta a:hover { text-decoration: underline; }
       `}</style>
       <div className="card">
         <div className="logo">errand<span>s</span></div>
@@ -164,6 +172,15 @@ export default function CustomerSignup() {
         <div className="footer">
           Already have an account? <a href="/login">Log in</a><br />
           Want to run errands? <a href="/signup/territory-owner">Apply as a Territory Owner</a>
+        </div>
+
+        <div className="divider"></div>
+
+        <div className="driver-cta">
+          <div className="driver-cta-title">Want to earn money?</div>
+          <div>
+            <a href="/driver-signup">Become a Driver →</a>
+          </div>
         </div>
       </div>
     </>
