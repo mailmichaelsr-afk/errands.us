@@ -1,73 +1,120 @@
-// app/login/page.tsx
+// app/login/page.tsx - Updated with driver link
 
 "use client";
-import { useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
-  const { user, loading, login } = useAuth();
+export default function Login() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!loading && user) router.replace("/");
-  }, [user, loading]);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-  useEffect(() => {
-    if (!loading) login();
-  }, [loading]);
+    try {
+      const res = await fetch("/.netlify/identity/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_type: "password", email, password }),
+      });
+
+      if (!res.ok) throw new Error("Invalid credentials");
+
+      window.location.href = "/";
+    } catch (err: any) {
+      setError("Invalid email or password");
+    }
+    setLoading(false);
+  };
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-          background: #f5f0e8;
-          background-image:
-            radial-gradient(circle at 20% 20%, rgba(134,193,134,0.12) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(255,200,120,0.12) 0%, transparent 50%);
-          min-height: 100vh;
-          font-family: 'DM Sans', sans-serif;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .wrap { text-align: center; padding: 40px 20px; }
-        .logo { font-family: 'Fraunces', serif; font-size: 2.2rem; font-weight: 700; color: #2d4a2d; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
+        .page { max-width: 500px; margin: 0 auto; padding: 60px 20px; }
+        .logo { font-family: 'Fraunces', serif; font-size: 2.5rem; font-weight: 700; 
+                color: #2d4a2d; text-align: center; margin-bottom: 8px; }
         .logo span { color: #7ab87a; }
-        .sub { color: #999; margin-top: 8px; font-size: 0.95rem; }
-        .spinner {
-          margin: 32px auto 0;
-          width: 32px; height: 32px;
-          border: 3px solid #e0d8cc;
-          border-top-color: #7ab87a;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
+        .tagline { text-align: center; color: #888; font-size: 1rem; margin-bottom: 40px; }
+        .card { background: #fff; border-radius: 16px; padding: 32px; 
+                box-shadow: 0 4px 20px rgba(45,74,45,0.1); }
+        .title { font-size: 1.5rem; font-weight: 600; color: #2d4a2d; 
+                 margin-bottom: 24px; text-align: center; }
+        .input { width: 100%; padding: 12px 14px; margin-bottom: 16px;
+                 border: 1.5px solid #e0d8cc; border-radius: 11px;
+                 font-size: 0.95rem; background: #faf8f4; outline: none; }
+        .input:focus { border-color: #7ab87a; background: #fff; }
+        .btn { width: 100%; padding: 14px; border-radius: 12px; border: none;
+               background: #2d4a2d; color: #f5f0e8; font-size: 1rem;
+               font-weight: 500; cursor: pointer; margin-top: 8px; }
+        .btn:hover { background: #3d6b3d; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .error { background: #ffe0e0; color: #c00; padding: 12px;
+                 border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+        .links { margin-top: 24px; text-align: center; }
+        .link-item { margin: 12px 0; font-size: 0.9rem; }
+        .link-item a { color: #7ab87a; text-decoration: none; font-weight: 500; }
+        .link-item a:hover { text-decoration: underline; }
+        .divider { height: 1px; background: #e0d8cc; margin: 20px 0; }
+        .driver-cta {
+          background: #f0f7f0; padding: 16px; border-radius: 10px;
+          text-align: center; margin-top: 20px;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .manual-btn {
-          margin-top: 24px;
-          background: #2d4a2d; color: #f5f0e8;
-          border: none; border-radius: 12px;
-          padding: 12px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 500;
-          cursor: pointer; transition: background 0.2s;
-        }
-        .manual-btn:hover { background: #3d6b3d; }
-        .signup-links { margin-top: 20px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-        .signup-link {
-          color: #7ab87a; text-decoration: none; font-size: 0.88rem; font-weight: 500;
-        }
-        .signup-link:hover { text-decoration: underline; }
+        .driver-cta-title { font-weight: 600; color: #2d4a2d; margin-bottom: 8px; }
+        .driver-cta a { color: #7ab87a; font-weight: 500; text-decoration: none; }
+        .driver-cta a:hover { text-decoration: underline; }
       `}</style>
-      <div className="wrap">
+
+      <div className="page">
         <div className="logo">errand<span>s</span></div>
-        <p className="sub">Sign in to your account</p>
-        <div className="spinner" />
-        <button className="manual-btn" onClick={login}>Open Sign In</button>
-        <div className="signup-links">
-          <a href="/signup/customer" className="signup-link">New? Sign up as a Customer</a>
-          <span style={{color:"#ccc"}}>·</span>
-          <a href="/signup/territory-owner" className="signup-link">Apply to be a Territory Owner</a>
+        <div className="tagline">Your neighborhood helping hands</div>
+
+        <div className="card">
+          <div className="title">Log In</div>
+
+          {error && <div className="error">{error}</div>}
+
+          <form onSubmit={handleLogin}>
+            <input
+              className="input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? "Logging in..." : "Log In"}
+            </button>
+          </form>
+
+          <div className="links">
+            <div className="link-item">
+              New customer? <a href="/signup">Sign up</a>
+            </div>
+            <div className="divider"></div>
+            <div className="driver-cta">
+              <div className="driver-cta-title">Want to earn money?</div>
+              <div>
+                <a href="/driver-signup">Become a Driver →</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>
