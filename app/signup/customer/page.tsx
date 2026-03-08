@@ -10,6 +10,7 @@ export default function CustomerSignup() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [identity, setIdentity] = useState<any>(null);
   const router = useRouter();
   const { user } = useAuth();
 
@@ -17,22 +18,15 @@ export default function CustomerSignup() {
     if (user) router.replace("/");
   }, [user, router]);
 
-  const submit = async () => {
-    if (!name.trim() || !email.trim() || !password) {
-      setError("Name, email, and password are required.");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    
-    try {
+  useEffect(() => {
+    // Load identity widget on mount
+    (async () => {
       const netlifyIdentity = await import("netlify-identity-widget");
-      const identity = netlifyIdentity.default;
+      const ni = netlifyIdentity.default;
+      ni.init({ logo: false });
+      setIdentity(ni);
       
-      identity.init({ logo: false });
-      
-      // Set up one-time login handler
-      const handleLogin = async (u: any) => {
+      ni.on("login", async (u: any) => {
         try {
           await fetch("/.netlify/functions/users-create", {
             method: "POST",
@@ -48,26 +42,57 @@ export default function CustomerSignup() {
           router.replace("/");
         } catch (e) {
           console.error("Failed to create user record:", e);
-          setError("Account created but failed to save details. Please contact support.");
         }
-      };
-      
-      identity.on("login", handleLogin);
-      
-      // Attempt signup
-      identity.open("signup");
-      identity.close(); // Close the widget UI
-      
-      await identity.signup(email.trim(), password, {
-        full_name: name.trim(),
-        phone: phone.trim(),
-        role: "customer",
       });
+    })();
+  }, []);
+
+  const submit = async () => {
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Name, email, and password are required.");
+      return;
+    }
+    if (!identity) {
+      setError("Still loading, please try again in a moment.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    
+    try {
+      // The open() call triggers the widget
+      identity.open("signup");
+      
+      // But we'll use the programmatic API
+      const user = await new Promise((resolve, reject) => {
+        // Set up temporary handler for this signup
+        const handleSignup = (user: any) => {
+          identity.off("signup", handleSignup);
+          resolve(user);
+        };
+        const handleError = (err: any) => {
+          identity.off("error", handleError);
+          reject(err);
+        };
+        
+        identity.on("signup", handleSignup);
+        identity.on("error", handleError);
+        
+        // Trigger signup
+        identity.gotrue.signup(email.trim(), password, {
+          full_name: name.trim(),
+          phone: phone.trim(),
+          role: "customer",
+        }).catch(reject);
+      });
+      
+      identity.close();
       
     } catch (e: any) {
       console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
+      identity.close();
     }
   };
 
@@ -170,9 +195,9 @@ export default function CustomerSignup() {
         <button
           className="btn-primary"
           onClick={submit}
-          disabled={loading}
+          disabled={loading || !identity}
         >
-          {loading ? "Creating account..." : "Sign Up"}
+          {loading ? "Creating account..." : !identity ? "Loading..." : "Sign Up"}
         </button>
 
         <div className="footer">
