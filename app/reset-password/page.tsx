@@ -1,10 +1,8 @@
-// app/reset-password/page.tsx - Password reset confirmation page
-
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 
-function ResetPasswordContent() {
+function ResetPasswordForm() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -14,7 +12,6 @@ function ResetPasswordContent() {
   const [token, setToken] = useState("");
 
   useEffect(() => {
-    // Get token from URL hash (Netlify Identity sends it as #recovery_token=...)
     const hash = window.location.hash;
     const tokenMatch = hash.match(/recovery_token=([^&]+)/);
     if (tokenMatch) {
@@ -47,19 +44,13 @@ function ResetPasswordContent() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          password: password 
-        }),
+        body: JSON.stringify({ password: password }),
       });
 
       if (!res.ok) throw new Error("Reset failed");
 
       setSuccess(true);
-      
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        router.push("/login");
-      }, 2000);
+      setTimeout(() => router.push("/login"), 2000);
     } catch (err: any) {
       setError("Failed to reset password. Please request a new reset link.");
     }
@@ -154,12 +145,10 @@ function ResetPasswordContent() {
           )}
 
           {success && (
-            <>
-              <div className="success">
-                ✅ Password reset successful!<br/>
-                Redirecting to login...
-              </div>
-            </>
+            <div className="success">
+              ✅ Password reset successful!<br/>
+              Redirecting to login...
+            </div>
           )}
         </div>
       </div>
@@ -175,12 +164,13 @@ export default function ResetPassword() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f5f0e8'
+        background: '#f5f0e8',
+        fontFamily: "'DM Sans', sans-serif"
       }}>
         Loading...
       </div>
     }>
-      <ResetPasswordContent />
+      <ResetPasswordForm />
     </Suspense>
   );
 }
