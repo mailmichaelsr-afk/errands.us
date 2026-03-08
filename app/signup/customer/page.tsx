@@ -30,6 +30,7 @@ export default function CustomerSignup() {
       ni.init({ logo: false });
       setIdentity(ni);
       
+      // Handle successful signup -> login flow
       ni.on("login", async (u: any) => {
         try {
           await fetch("/.netlify/functions/users-create", {
@@ -47,6 +48,12 @@ export default function CustomerSignup() {
         } catch (e) {
           console.error("Failed to create user record:", e);
         }
+      });
+
+      // Handle email confirmation - auto close widget and redirect
+      ni.on("confirm", (u: any) => {
+        ni.close();
+        router.replace("/");
       });
     })();
   }, []);
@@ -72,14 +79,14 @@ export default function CustomerSignup() {
     setLoading(true);
     
     try {
-      // Don't open the widget UI - we're using our custom form
-      
-      await new Promise((resolve, reject) => {
+      const signupPromise = new Promise((resolve, reject) => {
         const handleSignup = (user: any) => {
           identity.off("signup", handleSignup);
+          identity.off("error", handleError);
           resolve(user);
         };
         const handleError = (err: any) => {
+          identity.off("signup", handleSignup);
           identity.off("error", handleError);
           reject(err);
         };
@@ -93,12 +100,23 @@ export default function CustomerSignup() {
           role: "customer",
         }).catch(reject);
       });
+
+      // 30 second timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Signup timed out. Please try again.")), 30000)
+      );
+
+      await Promise.race([signupPromise, timeoutPromise]);
+
+      // Success
+      setLoading(false);
+      alert("✅ Account created! Please check your email to confirm your account.");
+      router.push("/login");
       
     } catch (e: any) {
       console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
-      identity.close();
     }
   };
 
