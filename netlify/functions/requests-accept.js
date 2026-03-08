@@ -7,16 +7,31 @@ export const config = { runtime: "nodejs" };
 export async function handler(event) {
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const { id, runner_id } = JSON.parse(event.body);
+    const data = JSON.parse(event.body);
 
+    if (!data.request_id || !data.driver_id) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "request_id and driver_id required" }),
+      };
+    }
+
+    // Update request to accepted status and assign driver
     const result = await sql`
       UPDATE requests
       SET status = 'accepted',
-          accepted_by = ${runner_id}
-      WHERE id = ${id}
+          assigned_to = ${data.driver_id}
+      WHERE id = ${data.request_id}
         AND status = 'open'
       RETURNING *
     `;
+
+    if (result.length === 0) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Request already accepted or not found" }),
+      };
+    }
 
     return {
       statusCode: 200,
