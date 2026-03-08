@@ -1,4 +1,4 @@
-// app/page.tsx - Complete with structured addresses and merchant dropdown
+// app/page.tsx - FINAL VERSION with driver link
 
 "use client";
 import { useEffect, useState } from "react";
@@ -38,7 +38,7 @@ const US_STATES = [
 ];
 
 export default function Home() {
-  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
+  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, isDriver, loading, logout } = useAuth();
   const router = useRouter();
   
   const [allRequests, setAllRequests] = useState<Request[]>([]);
@@ -497,6 +497,11 @@ export default function Home() {
               {isTerritoryOwner && (
                 <div className="dropdown-item" onClick={() => router.push('/owner')}>
                   📊 Owner Dashboard
+                </div>
+              )}
+              {isDriver && (
+                <div className="dropdown-item" onClick={() => router.push('/driver')}>
+                  🚗 Driver Dashboard
                 </div>
               )}
               <div className="dropdown-item" onClick={() => router.push('/directory')}>
