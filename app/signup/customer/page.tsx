@@ -51,6 +51,10 @@ export default function CustomerSignup() {
       setError("Name, email, and password are required.");
       return;
     }
+    if (!identity) {
+      setError("Loading... please wait a moment and try again.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
