@@ -12,6 +12,7 @@ type Request = {
   dropoff: string;
   status: string;
   customer_id: number;
+  assigned_to?: number;
   customer_name?: string;
   offered_amount?: number;
   pickup_flexibility?: string;
