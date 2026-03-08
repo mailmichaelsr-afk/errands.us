@@ -1,4 +1,4 @@
-// app/owner/page.tsx (with integrated navigation)
+// app/owner/page.tsx - FINAL with merchant management link
 
 "use client";
 import { useEffect, useState } from "react";
@@ -154,6 +154,31 @@ export default function OwnerDashboard() {
           font-size: 0.82rem; font-weight: 500;
         }
 
+        .quick-links {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .quick-link {
+          flex: 1;
+          padding: 14px 20px;
+          background: #fff;
+          border: 1.5px solid #e0d8cc;
+          border-radius: 12px;
+          text-align: center;
+          text-decoration: none;
+          color: #2d4a2d;
+          font-size: 0.9rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          box-shadow: 0 2px 8px rgba(45,74,45,0.05);
+        }
+        .quick-link:hover {
+          border-color: #7ab87a;
+          background: #f0f7f0;
+          transform: translateY(-2px);
+        }
+
         .stats {
           display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
           gap: 12px; margin-bottom: 24px;
@@ -272,6 +297,12 @@ export default function OwnerDashboard() {
           <div className="user-badge">
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
+        </div>
+
+        <div className="quick-links">
+          <a href="/owner/merchants" className="quick-link">
+            🏪 Manage My Merchants
+          </a>
         </div>
 
         <div className="stats">
