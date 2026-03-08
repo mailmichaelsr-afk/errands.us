@@ -11,6 +11,7 @@ export default function CustomerSignup() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [identity, setIdentity] = useState<any>(null);
@@ -139,6 +140,30 @@ export default function CustomerSignup() {
         }
         .input:focus { border-color: #7ab87a; box-shadow: 0 0 0 3px rgba(122,184,122,0.15); background: #fff; }
         .input::placeholder { color: #bbb; }
+        .password-wrapper {
+          position: relative;
+          margin-bottom: 14px;
+        }
+        .password-wrapper .input {
+          margin-bottom: 0;
+          padding-right: 45px;
+        }
+        .toggle-password {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: #999;
+          cursor: pointer;
+          font-size: 0.85rem;
+          padding: 4px 8px;
+          font-weight: 500;
+        }
+        .toggle-password:hover {
+          color: #7ab87a;
+        }
         .error { background: #fff0f0; color: #c44; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 14px; }
         .btn-primary {
           width: 100%; padding: 13px; background: #2d4a2d; color: #f5f0e8;
@@ -193,22 +218,40 @@ export default function CustomerSignup() {
         />
 
         <label>Password *</label>
-        <input
-          className="input"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="••••••••"
-        />
+        <div className="password-wrapper">
+          <input
+            className="input"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            className="toggle-password"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         <label>Confirm Password *</label>
-        <input
-          className="input"
-          type="password"
-          value={confirmPassword}
-          onChange={e => setConfirmPassword(e.target.value)}
-          placeholder="••••••••"
-        />
+        <div className="password-wrapper">
+          <input
+            className="input"
+            type={showPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            className="toggle-password"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         {error && <div className="error">{error}</div>}
 
