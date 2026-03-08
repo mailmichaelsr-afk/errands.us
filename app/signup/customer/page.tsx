@@ -1,3 +1,5 @@
+// app/signup/customer/page.tsx
+
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -8,6 +10,7 @@ export default function CustomerSignup() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [identity, setIdentity] = useState<any>(null);
@@ -50,6 +53,14 @@ export default function CustomerSignup() {
   const submit = async () => {
     if (!name.trim() || !email.trim() || !password) {
       setError("Name, email, and password are required.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
     if (!identity) {
@@ -187,6 +198,15 @@ export default function CustomerSignup() {
           type="password"
           value={password}
           onChange={e => setPassword(e.target.value)}
+          placeholder="••••••••"
+        />
+
+        <label>Confirm Password *</label>
+        <input
+          className="input"
+          type="password"
+          value={confirmPassword}
+          onChange={e => setConfirmPassword(e.target.value)}
           placeholder="••••••••"
         />
 
