@@ -10,6 +10,8 @@ export default function TerritoryOwnerSignup() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [businessName, setBusinessName] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [why, setWhy] = useState("");
@@ -21,13 +23,15 @@ export default function TerritoryOwnerSignup() {
 
   useEffect(() => {
     if (user) router.replace("/");
-  }, [user]);
+  }, [user, router]);
 
   useEffect(() => {
-    import("netlify-identity-widget").then((mod) => {
-      const ni = mod.default;
+    (async () => {
+      const netlifyIdentity = await import("netlify-identity-widget");
+      const ni = netlifyIdentity.default;
       ni.init({ logo: false });
       setIdentity(ni);
+      
       ni.on("login", async (u: any) => {
         try {
           await fetch("/.netlify/functions/users-create", {
@@ -42,32 +46,68 @@ export default function TerritoryOwnerSignup() {
               business_name: businessName,
               desired_zip: zipCode,
               application_notes: why,
-              status: "pending",  // needs admin approval
+              status: "pending",
             }),
           });
+          router.replace("/");
         } catch (e) {
           console.error("Failed to create user record:", e);
         }
-        router.replace("/application-submitted");
       });
-    });
-  }, [name, phone, businessName, zipCode, why]);
+
+      // Handle email confirmation - auto close widget and redirect
+      ni.on("confirm", (u: any) => {
+        ni.close();
+        router.replace("/");
+      });
+    })();
+  }, []);
 
   const submit = async () => {
-    if (!name.trim() || !email.trim() || !password || !phone.trim()) {
-      setError("Name, email, phone, and password are required.");
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Name, email, and password are required.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (!identity) {
+      setError("Still loading, please try again in a moment.");
       return;
     }
     setError("");
     setLoading(true);
+    
     try {
-      await identity.signup(email.trim(), password, {
-        full_name: name.trim(),
-        phone: phone.trim(),
-        business_name: businessName.trim(),
-        role: "territory_owner",
+      // Don't open the widget UI - we're using our custom form
+      
+      await new Promise((resolve, reject) => {
+        const handleSignup = (user: any) => {
+          identity.off("signup", handleSignup);
+          resolve(user);
+        };
+        const handleError = (err: any) => {
+          identity.off("error", handleError);
+          reject(err);
+        };
+        
+        identity.on("signup", handleSignup);
+        identity.on("error", handleError);
+        
+        identity.gotrue.signup(email.trim(), password, {
+          full_name: name.trim(),
+          phone: phone.trim(),
+          role: "territory_owner",
+        }).catch(reject);
       });
+      
     } catch (e: any) {
+      console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
     }
@@ -83,18 +123,18 @@ export default function TerritoryOwnerSignup() {
           background-image: radial-gradient(circle at 20% 20%, rgba(134,193,134,0.12) 0%, transparent 50%),
             radial-gradient(circle at 80% 80%, rgba(255,200,120,0.12) 0%, transparent 50%);
           min-height: 100vh; font-family: 'DM Sans', sans-serif;
-          display: flex; align-items: center; justify-content: center; padding: 40px 20px;
+          display: flex; align-items: center; justify-content: center; padding: 20px;
         }
         .card {
           background: #fff; border-radius: 20px; padding: 36px 28px;
-          width: 100%; max-width: 520px;
+          width: 100%; max-width: 460px;
           box-shadow: 0 4px 24px rgba(45,74,45,0.1);
           border: 1px solid rgba(45,74,45,0.06);
         }
         .logo { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 700; color: #2d4a2d; margin-bottom: 4px; }
         .logo span { color: #7ab87a; }
         .heading { font-family: 'Fraunces', serif; font-size: 1.3rem; color: #2d4a2d; margin: 20px 0 6px; }
-        .sub { color: #999; font-size: 0.88rem; margin-bottom: 24px; line-height: 1.5; }
+        .sub { color: #999; font-size: 0.88rem; margin-bottom: 24px; }
         label { display: block; font-size: 0.83rem; font-weight: 500; color: #555; margin-bottom: 5px; }
         .input, .textarea {
           display: block; width: 100%; padding: 11px 14px; margin-bottom: 14px;
@@ -106,6 +146,30 @@ export default function TerritoryOwnerSignup() {
         .textarea { min-height: 100px; resize: vertical; }
         .input:focus, .textarea:focus { border-color: #7ab87a; box-shadow: 0 0 0 3px rgba(122,184,122,0.15); background: #fff; }
         .input::placeholder, .textarea::placeholder { color: #bbb; }
+        .password-wrapper {
+          position: relative;
+          margin-bottom: 14px;
+        }
+        .password-wrapper .input {
+          margin-bottom: 0;
+          padding-right: 45px;
+        }
+        .toggle-password {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: #999;
+          cursor: pointer;
+          font-size: 0.85rem;
+          padding: 4px 8px;
+          font-weight: 500;
+        }
+        .toggle-password:hover {
+          color: #7ab87a;
+        }
         .error { background: #fff0f0; color: #c44; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 14px; }
         .btn-primary {
           width: 100%; padding: 13px; background: #2d4a2d; color: #f5f0e8;
@@ -119,13 +183,19 @@ export default function TerritoryOwnerSignup() {
         .footer { text-align: center; margin-top: 20px; font-size: 0.88rem; color: #999; }
         .footer a { color: #7ab87a; text-decoration: none; font-weight: 500; }
         .footer a:hover { text-decoration: underline; }
-        .row { display: flex; gap: 10px; }
-        .row .input { margin-bottom: 0; }
+        .notice {
+          background: #fff9e6; border-left: 3px solid #ffc107;
+          padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem; color: #666;
+        }
       `}</style>
       <div className="card">
         <div className="logo">errand<span>s</span></div>
-        <div className="heading">Apply as a Territory Owner</div>
-        <p className="sub">Own your local territory, build your business, serve your community</p>
+        <div className="heading">Apply as Territory Owner</div>
+        <p className="sub">Run your own errands business</p>
+
+        <div className="notice">
+          ⏳ Your application will be reviewed by our team. You'll be notified via email once approved.
+        </div>
 
         <label>Full Name *</label>
         <input
@@ -135,36 +205,22 @@ export default function TerritoryOwnerSignup() {
           placeholder="John Doe"
         />
 
-        <div className="row">
-          <div style={{ flex: 1 }}>
-            <label>Email *</label>
-            <input
-              className="input"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label>Phone *</label>
-            <input
-              className="input"
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="(555) 123-4567"
-            />
-          </div>
-        </div>
-
-        <label>Password *</label>
+        <label>Email *</label>
         <input
           className="input"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="••••••••"
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
+
+        <label>Phone</label>
+        <input
+          className="input"
+          type="tel"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          placeholder="(555) 123-4567"
         />
 
         <label>Business Name (optional)</label>
@@ -172,10 +228,10 @@ export default function TerritoryOwnerSignup() {
           className="input"
           value={businessName}
           onChange={e => setBusinessName(e.target.value)}
-          placeholder="Your Errand Service LLC"
+          placeholder="My Errands LLC"
         />
 
-        <label>Desired Zip Code / Area</label>
+        <label>Desired ZIP Code (optional)</label>
         <input
           className="input"
           value={zipCode}
@@ -183,27 +239,63 @@ export default function TerritoryOwnerSignup() {
           placeholder="90210"
         />
 
-        <label>Why do you want to be a territory owner?</label>
+        <label>Why do you want to be a territory owner? (optional)</label>
         <textarea
           className="textarea"
           value={why}
           onChange={e => setWhy(e.target.value)}
-          placeholder="Tell us about your background and why you're interested..."
+          placeholder="Tell us about your experience and goals..."
         />
+
+        <label>Password *</label>
+        <div className="password-wrapper">
+          <input
+            className="input"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            className="toggle-password"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+
+        <label>Confirm Password *</label>
+        <div className="password-wrapper">
+          <input
+            className="input"
+            type={showPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            className="toggle-password"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         {error && <div className="error">{error}</div>}
 
         <button
           className="btn-primary"
           onClick={submit}
-          disabled={loading}
+          disabled={loading || !identity}
         >
-          {loading ? "Submitting application..." : "Submit Application"}
+          {loading ? "Submitting..." : !identity ? "Loading..." : "Submit Application"}
         </button>
 
         <div className="footer">
           Already have an account? <a href="/login">Log in</a><br />
-          Just need errands done? <a href="/signup/customer">Sign up as a Customer</a>
+          Just want to help? <a href="/signup/customer">Sign up as Customer</a>
         </div>
       </div>
     </>
