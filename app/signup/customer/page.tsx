@@ -72,12 +72,9 @@ export default function CustomerSignup() {
     setLoading(true);
     
     try {
-      // The open() call triggers the widget
-      identity.open("signup");
+      // Don't open the widget UI - we're using our custom form
       
-      // But we'll use the programmatic API
-      const user = await new Promise((resolve, reject) => {
-        // Set up temporary handler for this signup
+      await new Promise((resolve, reject) => {
         const handleSignup = (user: any) => {
           identity.off("signup", handleSignup);
           resolve(user);
@@ -90,15 +87,12 @@ export default function CustomerSignup() {
         identity.on("signup", handleSignup);
         identity.on("error", handleError);
         
-        // Trigger signup
         identity.gotrue.signup(email.trim(), password, {
           full_name: name.trim(),
           phone: phone.trim(),
           role: "customer",
         }).catch(reject);
       });
-      
-      identity.close();
       
     } catch (e: any) {
       console.error("Signup error:", e);
