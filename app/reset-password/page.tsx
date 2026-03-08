@@ -1,12 +1,11 @@
 // app/reset-password/page.tsx - Password reset confirmation page
 
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
 
-export default function ResetPassword() {
+function ResetPasswordContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -165,5 +164,23 @@ export default function ResetPassword() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ResetPassword() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f5f0e8'
+      }}>
+        Loading...
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
