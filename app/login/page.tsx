@@ -151,7 +151,7 @@ export default function Login() {
                 <div className="driver-cta">
                   <div className="driver-cta-title">Want to earn money?</div>
                   <div>
-                    <a href="/driver-signup">Become a Driver →</a>
+                    <a href="/signup/driver">Become a Driver →</a>
                   </div>
                 </div>
               </div>
