@@ -1,4 +1,4 @@
-// app/admin/page.tsx (with Add User functionality and Merchant link)
+// app/admin/page.tsx - Complete with edit, delete, unassign
 
 "use client";
 import { useEffect, useState } from "react";
@@ -62,6 +62,7 @@ export default function AdminDashboard() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   
   const [showTerritoryForm, setShowTerritoryForm] = useState(false);
+  const [editingTerritoryId, setEditingTerritoryId] = useState<number | null>(null);
   const [newTerritoryName, setNewTerritoryName] = useState("");
   const [newTerritoryZips, setNewTerritoryZips] = useState("");
   const [newTerritoryPrice, setNewTerritoryPrice] = useState("");
@@ -82,14 +83,14 @@ export default function AdminDashboard() {
     if (!loading && (!user || !isAdmin)) {
       router.replace("/login");
     }
-  }, [user, isAdmin, loading]);
+  }, [user, isAdmin, loading, router]);
 
   const loadData = async () => {
     setLoadingData(true);
     try {
       const [terrRes, usersRes, merchRes] = await Promise.all([
         fetch("/.netlify/functions/territories-get"),
-        fetch("/.netlify/functions/users-get"),
+        fetch("/.netlify/functions/users-get-all"),
         fetch("/.netlify/functions/merchants-get-all"),
       ]);
       if (terrRes.ok) setTerritories(await terrRes.json());
@@ -119,32 +120,65 @@ export default function AdminDashboard() {
     }
   };
 
-  const createTerritory = async () => {
-    if (!newTerritoryName.trim() || !newTerritoryZips.trim()) return;
-    
-    const zipArray = newTerritoryZips.split(",").map(z => z.trim());
-    
-    await fetch("/.netlify/functions/territories-create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newTerritoryName.trim(),
-        zip_codes: zipArray,
-        price: newTerritoryPrice ? parseFloat(newTerritoryPrice) : null,
-        status: "available",
-        time_slot_days: newTimeDays,
-        time_slot_start: newTimeStart + ":00",
-        time_slot_end: newTimeEnd + ":00",
-      }),
-    });
-    
+  const openAddTerritory = () => {
+    setEditingTerritoryId(null);
     setNewTerritoryName("");
     setNewTerritoryZips("");
     setNewTerritoryPrice("");
     setNewTimeDays(['mon','tue','wed','thu','fri','sat','sun']);
     setNewTimeStart("00:00");
     setNewTimeEnd("23:59");
+    setShowTerritoryForm(true);
+  };
+
+  const openEditTerritory = (t: Territory) => {
+    setEditingTerritoryId(t.id);
+    setNewTerritoryName(t.name);
+    setNewTerritoryZips(t.zip_codes?.join(", ") || "");
+    setNewTerritoryPrice(t.price ? t.price.toString() : "");
+    setNewTimeDays(t.time_slot_days || ['mon','tue','wed','thu','fri','sat','sun']);
+    setNewTimeStart(t.time_slot_start?.slice(0, 5) || "00:00");
+    setNewTimeEnd(t.time_slot_end?.slice(0, 5) || "23:59");
+    setShowTerritoryForm(true);
+  };
+
+  const saveTerritory = async () => {
+    if (!newTerritoryName.trim() || !newTerritoryZips.trim()) return;
+    
+    const zipArray = newTerritoryZips.split(",").map(z => z.trim());
+    
+    const endpoint = editingTerritoryId 
+      ? "/.netlify/functions/territories-update"
+      : "/.netlify/functions/territories-create";
+    
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingTerritoryId,
+        name: newTerritoryName.trim(),
+        zip_codes: zipArray,
+        price: newTerritoryPrice ? parseFloat(newTerritoryPrice) : null,
+        status: editingTerritoryId ? undefined : "available",
+        time_slot_days: newTimeDays,
+        time_slot_start: newTimeStart + ":00",
+        time_slot_end: newTimeEnd + ":00",
+      }),
+    });
+    
     setShowTerritoryForm(false);
+    loadData();
+  };
+
+  const deleteTerritory = async (id: number, name: string) => {
+    if (!confirm(`Delete territory "${name}"? This cannot be undone.`)) return;
+    
+    await fetch("/.netlify/functions/territories-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    
     loadData();
   };
 
@@ -158,6 +192,18 @@ export default function AdminDashboard() {
       body: JSON.stringify({ territory_id: territoryId, user_id: parseInt(userId) }),
     });
     setSelectedOwner({...selectedOwner, [territoryId]: ""});
+    loadData();
+  };
+
+  const unassignTerritory = async (territoryId: number, name: string) => {
+    if (!confirm(`Remove owner from "${name}" and make it available again?`)) return;
+    
+    await fetch("/.netlify/functions/territories-unassign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ territory_id: territoryId }),
+    });
+    
     loadData();
   };
 
@@ -318,6 +364,7 @@ export default function AdminDashboard() {
         .btn-secondary:hover { background: #e8e0d4; }
         .btn-ghost { background: #faf8f4; color: #666; font-size: 0.8rem; padding: 6px 12px; }
         .btn-ghost:hover { background: #f0f0e8; }
+        .btn-small { padding: 6px 10px; font-size: 0.8rem; }
 
         .card {
           background: #fff; border-radius: 14px; padding: 20px;
@@ -327,7 +374,7 @@ export default function AdminDashboard() {
         }
         .card-title { font-weight: 600; font-size: 1rem; color: #1a1a1a; margin-bottom: 8px; }
         .card-meta { font-size: 0.85rem; color: #999; margin-bottom: 12px; }
-        .card-actions { display: flex; gap: 8px; align-items: center; }
+        .card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
         .form-card {
           background: #fff; border-radius: 14px; padding: 24px;
@@ -383,19 +430,14 @@ export default function AdminDashboard() {
           <div className="admin-badge">👤 {user?.user_metadata?.full_name || user?.email}</div>
         </div>
 
-
-
         <div className="quick-links">
-  <a href="/admin/territories" className="quick-link">
-    🗺️ Manage Territories
-  </a>
-  <a href="/admin/merchants" className="quick-link">
-    🏪 Manage Merchants
-  </a>
-</div>
-
-
-        
+          <a href="/admin/merchants" className="quick-link">
+            🏪 Manage Merchants
+          </a>
+          <a href="/admin/users" className="quick-link">
+            👥 Manage Users
+          </a>
+        </div>
 
         <div className="stats">
           <div className="stat-card">
@@ -432,13 +474,16 @@ export default function AdminDashboard() {
           <>
             <div className="section-head">
               <span>Territories</span>
-              <button className="btn btn-primary" onClick={() => setShowTerritoryForm(!showTerritoryForm)}>
+              <button className="btn btn-primary" onClick={openAddTerritory}>
                 + Create Territory
               </button>
             </div>
 
             {showTerritoryForm && (
               <div className="form-card">
+                <div style={{fontSize: '1.1rem', fontWeight: 600, marginBottom: 16, color: '#2d4a2d'}}>
+                  {editingTerritoryId ? "Edit Territory" : "Create Territory"}
+                </div>
                 <input
                   className="input"
                   placeholder="Territory name (e.g. Downtown LA - Evening Shift)"
@@ -503,7 +548,9 @@ export default function AdminDashboard() {
                 </div>
 
                 <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                  <button className="btn btn-primary" onClick={createTerritory}>Create</button>
+                  <button className="btn btn-primary" onClick={saveTerritory}>
+                    {editingTerritoryId ? "Save Changes" : "Create"}
+                  </button>
                   <button className="btn btn-secondary" onClick={() => setShowTerritoryForm(false)}>Cancel</button>
                 </div>
               </div>
@@ -526,28 +573,44 @@ export default function AdminDashboard() {
                     {t.price && ` • $${t.price}`}
                     {t.owner_name && ` • Owner: ${t.owner_name} (${t.owner_email})`}
                   </div>
-                  {t.status === "available" && activeOwners.length > 0 && (
-                    <div className="card-actions">
-                      <select 
-                        className="input" 
-                        style={{ width: "auto", marginBottom: 0 }}
-                        value={selectedOwner[t.id] || ""}
-                        onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}
-                      >
-                        <option value="">Assign to...</option>
-                        {activeOwners.map(u => (
-                          <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
-                        ))}
-                      </select>
+                  <div className="card-actions">
+                    {t.status === "available" && activeOwners.length > 0 && (
+                      <>
+                        <select 
+                          className="input" 
+                          style={{ width: "auto", marginBottom: 0, flex: 1 }}
+                          value={selectedOwner[t.id] || ""}
+                          onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}
+                        >
+                          <option value="">Assign to...</option>
+                          {activeOwners.map(u => (
+                            <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                          ))}
+                        </select>
+                        <button 
+                          className="btn btn-success btn-small"
+                          onClick={() => assignTerritory(t.id)}
+                          disabled={!selectedOwner[t.id]}
+                        >
+                          Assign
+                        </button>
+                      </>
+                    )}
+                    {t.status === "sold" && (
                       <button 
-                        className="btn btn-success"
-                        onClick={() => assignTerritory(t.id)}
-                        disabled={!selectedOwner[t.id]}
+                        className="btn btn-danger btn-small"
+                        onClick={() => unassignTerritory(t.id, t.name)}
                       >
-                        Assign
+                        Remove Owner
                       </button>
-                    </div>
-                  )}
+                    )}
+                    <button className="btn btn-secondary btn-small" onClick={() => openEditTerritory(t)}>
+                      Edit
+                    </button>
+                    <button className="btn btn-danger btn-small" onClick={() => deleteTerritory(t.id, t.name)}>
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -610,8 +673,8 @@ export default function AdminDashboard() {
                       {u.email} • {u.phone} • Applied {new Date(u.created_at).toLocaleDateString()}
                     </div>
                     <div className="card-actions">
-                      <button className="btn btn-success" onClick={() => approveUser(u.id)}>Approve</button>
-                      <button className="btn btn-danger" onClick={() => suspendUser(u.id)}>Reject</button>
+                      <button className="btn btn-success btn-small" onClick={() => approveUser(u.id)}>Approve</button>
+                      <button className="btn btn-danger btn-small" onClick={() => suspendUser(u.id)}>Reject</button>
                     </div>
                   </div>
                 ))}
@@ -643,8 +706,8 @@ export default function AdminDashboard() {
                       {m.category} • {m.address} • Submitted by {m.submitted_by}
                     </div>
                     <div className="card-actions">
-                      <button className="btn btn-success" onClick={() => approveMerchant(m.id)}>Approve</button>
-                      <button className="btn btn-danger" onClick={() => rejectMerchant(m.id)}>Reject</button>
+                      <button className="btn btn-success btn-small" onClick={() => approveMerchant(m.id)}>Approve</button>
+                      <button className="btn btn-danger btn-small" onClick={() => rejectMerchant(m.id)}>Reject</button>
                     </div>
                   </div>
                 ))}
