@@ -1,4 +1,4 @@
-// netlify/functions/requests-complete.js (v2 with photo enforcement)
+// netlify/functions/requests-complete.js
 
 import { neon } from "@neondatabase/serverless";
 
@@ -7,31 +7,20 @@ export const config = { runtime: "nodejs" };
 export async function handler(event) {
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const { id } = JSON.parse(event.body);
+    const data = JSON.parse(event.body);
 
-    // Check if delivery photo exists
-    const request = await sql`
-      SELECT delivery_photo_url 
-      FROM requests 
-      WHERE id = ${id}
-    `;
-
-    if (!request[0] || !request[0].delivery_photo_url) {
+    if (!data.request_id) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ 
-          error: "Delivery photo required",
-          message: "Please upload a delivery photo before marking this request complete."
-        }),
+        body: JSON.stringify({ error: "request_id required" }),
       };
     }
 
     const result = await sql`
       UPDATE requests
       SET status = 'completed',
-          completed_at = NOW(),
-          actual_delivery_time = NOW()
-      WHERE id = ${id}
+          completed_at = NOW()
+      WHERE id = ${data.request_id}
       RETURNING *
     `;
 
