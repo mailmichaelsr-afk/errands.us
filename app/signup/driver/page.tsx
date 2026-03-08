@@ -47,6 +47,12 @@ export default function DriverSignup() {
           console.error("Failed to create driver record:", e);
         }
       });
+
+      // Handle email confirmation - auto close widget and redirect
+      ni.on("confirm", (u: any) => {
+        ni.close();
+        router.replace("/driver");
+      });
     })();
   }, []);
 
@@ -71,7 +77,7 @@ export default function DriverSignup() {
     setLoading(true);
     
     try {
-      identity.open("signup");
+      // Don't open the widget UI - we're using our custom form
       
       await new Promise((resolve, reject) => {
         const handleSignup = (user: any) => {
@@ -93,13 +99,10 @@ export default function DriverSignup() {
         }).catch(reject);
       });
       
-      identity.close();
-      
     } catch (e: any) {
       console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
-      identity.close();
     }
   };
 
