@@ -31,6 +31,7 @@ export default function OwnerDashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingData, setLoadingData] = useState(true);
   const [territory, setTerritory] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
     if (!loading && (!user || !isTerritoryOwner)) {
@@ -42,12 +43,18 @@ export default function OwnerDashboard() {
     if (!dbUserId) return;
     setLoadingData(true);
     try {
-      const [reqRes, terrRes] = await Promise.all([
+      const [reqRes, terrRes, statsRes] = await Promise.all([
         fetch(`/.netlify/functions/requests-get-by-owner?owner_id=${dbUserId}`),
         fetch(`/.netlify/functions/territory-get-by-owner?owner_id=${dbUserId}`),
+        fetch(`/.netlify/functions/territory-stats-get?owner_id=${dbUserId}`),
       ]);
       if (reqRes.ok) setRequests(await reqRes.json());
       if (terrRes.ok) setTerritory(await terrRes.json());
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        // If array, take first territory stats
+        setStats(Array.isArray(statsData) ? statsData[0] : statsData);
+      }
     } catch (e) {
       console.error("Failed to load owner data:", e);
     }
@@ -190,6 +197,7 @@ export default function OwnerDashboard() {
         }
         .stat-label { font-size: 0.78rem; color: #999; margin-bottom: 5px; }
         .stat-value { font-family: 'Fraunces', serif; font-size: 1.6rem; color: #2d4a2d; font-weight: 700; }
+        .stat-meta { font-size: 0.7rem; color: #999; margin-top: 4px; }
 
         .view-tabs {
           display: flex; gap: 8px; margin-bottom: 20px;
@@ -307,20 +315,35 @@ export default function OwnerDashboard() {
 
         <div className="stats">
           <div className="stat-card">
-            <div className="stat-label">Open Requests</div>
-            <div className="stat-value">{openRequests.length}</div>
+            <div className="stat-label">This Month</div>
+            <div className="stat-value">{stats?.requests_this_month || 0}</div>
+            <div className="stat-meta">
+              {stats?.growth_rate !== undefined && (
+                <span style={{color: stats.growth_rate >= 0 ? '#7ab87a' : '#dc3545', fontSize: '0.75rem'}}>
+                  {stats.growth_rate >= 0 ? '↑' : '↓'} {Math.abs(stats.growth_rate)}%
+                </span>
+              )}
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">In Progress</div>
-            <div className="stat-value">{acceptedRequests.length}</div>
+            <div className="stat-label">Open Now</div>
+            <div className="stat-value">{stats?.open_requests || 0}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Done Today</div>
-            <div className="stat-value">{completedToday.length}</div>
+            <div className="stat-label">Earnings (30d)</div>
+            <div className="stat-value">${(stats?.earnings_last_30_days || 0).toFixed(0)}</div>
+            <div className="stat-meta" style={{fontSize: '0.7rem', color: '#999'}}>
+              ${(stats?.avg_earnings_per_request || 0).toFixed(0)}/req avg
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Total Earnings</div>
-            <div className="stat-value">${totalEarnings.toFixed(2)}</div>
+            <div className="stat-label">Rating</div>
+            <div className="stat-value">
+              {stats?.avg_rating ? `⭐ ${stats.avg_rating.toFixed(1)}` : '—'}
+            </div>
+            <div className="stat-meta" style={{fontSize: '0.7rem', color: '#999'}}>
+              {stats?.unique_customers || 0} customers
+            </div>
           </div>
         </div>
 
