@@ -145,7 +145,7 @@ export default function Login() {
                   </button>
                 </div>
                 <div className="link-item">
-                  New customer? <a href="/signup">Sign up</a>
+                  New customer? <a href="/signup/customer">Sign up</a>
                 </div>
                 <div className="divider"></div>
                 <div className="driver-cta">
