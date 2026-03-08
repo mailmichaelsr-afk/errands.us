@@ -42,8 +42,11 @@ export default function DriverDashboard() {
       if (res.ok) {
         const all = await res.json();
         
-        // Open requests (not assigned or assigned to territory but owner hasn't accepted)
-        const open = all.filter((r: Request) => r.status === 'open');
+        // Open requests in unclaimed territories (assigned_to is null) 
+        // OR requests specifically assigned to me
+        const open = all.filter((r: Request) => 
+          r.status === 'open' && (!r.assigned_to || r.assigned_to === dbUserId)
+        );
         setOpenRequests(open);
         
         // My accepted/completed jobs
