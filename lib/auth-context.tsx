@@ -1,126 +1,85 @@
-// lib/auth-context.tsx (simplified - looks up by email only)
+// lib/auth-context.tsx - COMPLETE VERSION with isDriver
 
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-type User = any; // Netlify Identity user
-type DbUser = {
-  id: number;
-  email: string;
-  full_name: string;
-  role: string;
-  status: string;
+type User = {
+  id: string;
+  email?: string;
+  user_metadata?: {
+    full_name?: string;
+  };
 };
 
 type AuthContextType = {
   user: User | null;
-  dbUser: DbUser | null;
   dbUserId: number | null;
-  role: string | null;
-  loading: boolean;
+  userRole: string | null;
   isAdmin: boolean;
-  isCustomer: boolean;
   isTerritoryOwner: boolean;
-  login: () => void;
+  isCustomer: boolean;
+  isDriver: boolean;
+  loading: boolean;
   logout: () => void;
-  signup: () => void;
 };
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  dbUser: null,
-  dbUserId: null,
-  role: null,
-  loading: true,
-  isAdmin: false,
-  isCustomer: false,
-  isTerritoryOwner: false,
-  login: () => {},
-  logout: () => {},
-  signup: () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [dbUser, setDbUser] = useState<DbUser | null>(null);
+  const [dbUserId, setDbUserId] = useState<number | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [identity, setIdentity] = useState<any>(null);
 
-  // Load Netlify Identity
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    import("netlify-identity-widget").then((mod) => {
-      const ni = mod.default;
-      ni.init({ logo: false });
-      setIdentity(ni);
-
-      // Get current user
-      const currentUser = ni.currentUser();
-      setUser(currentUser);
-
-      // Listen for auth changes
-      ni.on("login", (user: any) => {
-        setUser(user);
-        ni.close();
-      });
-
-      ni.on("logout", () => {
-        setUser(null);
-        setDbUser(null);
-      });
-
-      setLoading(false);
-    });
+    checkUser();
   }, []);
 
-  // Load database user when Netlify user changes
-  useEffect(() => {
-    if (!user?.email) {
-      setDbUser(null);
-      return;
-    }
+  const checkUser = async () => {
+    try {
+      const res = await fetch("/.netlify/identity/user");
+      if (res.ok) {
+        const netlifyUser = await res.json();
+        setUser(netlifyUser);
 
-    // Fetch database user by email
-    fetch(`/.netlify/functions/users-get-by-email?email=${encodeURIComponent(user.email)}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data) {
-          setDbUser(data);
-          console.log("Loaded DB user:", data);
-        } else {
-          console.warn("No database user found for email:", user.email);
+        // Get DB user info
+        const dbRes = await fetch(`/.netlify/functions/users-get-by-email?email=${netlifyUser.email}`);
+        if (dbRes.ok) {
+          const dbUser = await dbRes.json();
+          setDbUserId(dbUser.id);
+          setUserRole(dbUser.role);
         }
-      })
-      .catch(err => {
-        console.error("Failed to load database user:", err);
-      });
-  }, [user?.email]);
+      }
+    } catch (e) {
+      console.error("Auth check failed:", e);
+    }
+    setLoading(false);
+  };
 
-  const login = () => identity?.open("login");
-  const logout = () => identity?.logout();
-  const signup = () => identity?.open("signup");
+  const logout = async () => {
+    await fetch("/.netlify/identity/logout", { method: "POST" });
+    setUser(null);
+    setDbUserId(null);
+    setUserRole(null);
+  };
 
-  const dbUserId = dbUser?.id || null;
-  const role = dbUser?.role || null;
-  const isAdmin = role === "admin";
-  const isCustomer = role === "customer";
-  const isTerritoryOwner = role === "territory_owner";
+  const isAdmin = userRole === "admin";
+  const isTerritoryOwner = userRole === "territory_owner";
+  const isCustomer = userRole === "customer";
+  const isDriver = userRole === "independent_driver";
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        dbUser,
         dbUserId,
-        role,
-        loading,
+        userRole,
         isAdmin,
-        isCustomer,
         isTerritoryOwner,
-        login,
+        isCustomer,
+        isDriver,
+        loading,
         logout,
-        signup,
       }}
     >
       {children}
@@ -128,4 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
