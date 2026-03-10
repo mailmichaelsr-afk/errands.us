@@ -49,7 +49,7 @@ export default function DriverSignup() {
       });
 
       // Handle email confirmation - auto close widget and redirect
-      ni.on("confirm", (u: any) => {
+      (ni as any).on("confirm", (u: any) => {
         ni.close();
         router.replace("/driver");
       });
