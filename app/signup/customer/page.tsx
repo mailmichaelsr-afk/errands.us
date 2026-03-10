@@ -98,14 +98,29 @@ export default function CustomerSignup() {
     setLoading(true);
     
     try {
-      // Trigger signup - don't wait for confirmation
-      await identity.gotrue.signup(email.trim(), password, {
+      // Step 1: Create Netlify Identity account
+      const signupResult = await identity.gotrue.signup(email.trim(), password, {
         full_name: name.trim(),
         phone: phone.trim(),
         role: "customer",
       });
 
-      // Success - email confirmation required
+      // Step 2: Immediately create DB user (don't wait for email confirmation)
+      if (signupResult && signupResult.id) {
+        await fetch("/.netlify/functions/users-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            netlify_id: signupResult.id,
+            email: email.trim(),
+            full_name: name.trim(),
+            phone: phone.trim(),
+            role: "customer",
+          }),
+        });
+      }
+
+      // Success
       setLoading(false);
       alert("✅ Account created! Please check your email to confirm your account, then you can log in.");
       router.push("/login");
