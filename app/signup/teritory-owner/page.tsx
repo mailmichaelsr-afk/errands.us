@@ -84,27 +84,17 @@ export default function TerritoryOwnerSignup() {
     setLoading(true);
     
     try {
-      // Don't open the widget UI - we're using our custom form
-      
-      await new Promise((resolve, reject) => {
-        const handleSignup = (user: any) => {
-          identity.off("signup", handleSignup);
-          resolve(user);
-        };
-        const handleError = (err: any) => {
-          identity.off("error", handleError);
-          reject(err);
-        };
-        
-        identity.on("signup", handleSignup);
-        identity.on("error", handleError);
-        
-        identity.gotrue.signup(email.trim(), password, {
-          full_name: name.trim(),
-          phone: phone.trim(),
-          role: "territory_owner",
-        }).catch(reject);
+      // Trigger signup - don't wait for confirmation
+      await identity.gotrue.signup(email.trim(), password, {
+        full_name: name.trim(),
+        phone: phone.trim(),
+        role: "territory_owner",
       });
+
+      // Success - email confirmation required
+      setLoading(false);
+      alert("✅ Application submitted! Please check your email to confirm your account. We'll review your application and notify you.");
+      router.push("/login");
       
     } catch (e: any) {
       console.error("Signup error:", e);
