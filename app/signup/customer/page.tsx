@@ -33,16 +33,19 @@ export default function CustomerSignup() {
       // Handle successful signup -> login flow
       ni.on("login", async (u: any) => {
         try {
+          // Get user data from either state (during signup) or metadata (after confirmation)
+          const userData = {
+            netlify_id: u.id,
+            email: u.email,
+            full_name: u.user_metadata?.full_name || name,
+            phone: u.user_metadata?.phone || phone,
+            role: "customer",
+          };
+
           await fetch("/.netlify/functions/users-create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              netlify_id: u.id,
-              email: u.email,
-              full_name: name,
-              phone,
-              role: "customer",
-            }),
+            body: JSON.stringify(userData),
           });
           router.replace("/");
         } catch (e) {
@@ -50,8 +53,24 @@ export default function CustomerSignup() {
         }
       });
 
-      // Handle email confirmation - auto close widget and redirect
-      ni.on("confirm", (u: any) => {
+      // Handle email confirmation - create DB user if not already created
+      ni.on("confirm", async (u: any) => {
+        try {
+          // Try to create user record (will fail gracefully if already exists)
+          await fetch("/.netlify/functions/users-create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              netlify_id: u.id,
+              email: u.email,
+              full_name: u.user_metadata?.full_name || "",
+              phone: u.user_metadata?.phone || "",
+              role: "customer",
+            }),
+          });
+        } catch (e) {
+          console.error("Failed to create user record on confirm:", e);
+        }
         ni.close();
         router.replace("/");
       });
