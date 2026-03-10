@@ -54,7 +54,7 @@ export default function CustomerSignup() {
       });
 
       // Handle email confirmation - create DB user if not already created
-      ni.on("confirm", async (u: any) => {
+      (ni as any).on("confirm", async (u: any) => {
         try {
           // Try to create user record (will fail gracefully if already exists)
           await fetch("/.netlify/functions/users-create", {
