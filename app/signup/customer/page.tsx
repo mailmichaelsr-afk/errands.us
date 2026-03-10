@@ -98,38 +98,16 @@ export default function CustomerSignup() {
     setLoading(true);
     
     try {
-      const signupPromise = new Promise((resolve, reject) => {
-        const handleSignup = (user: any) => {
-          identity.off("signup", handleSignup);
-          identity.off("error", handleError);
-          resolve(user);
-        };
-        const handleError = (err: any) => {
-          identity.off("signup", handleSignup);
-          identity.off("error", handleError);
-          reject(err);
-        };
-        
-        identity.on("signup", handleSignup);
-        identity.on("error", handleError);
-        
-        identity.gotrue.signup(email.trim(), password, {
-          full_name: name.trim(),
-          phone: phone.trim(),
-          role: "customer",
-        }).catch(reject);
+      // Trigger signup - don't wait for confirmation
+      await identity.gotrue.signup(email.trim(), password, {
+        full_name: name.trim(),
+        phone: phone.trim(),
+        role: "customer",
       });
 
-      // 30 second timeout
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Signup timed out. Please try again.")), 30000)
-      );
-
-      await Promise.race([signupPromise, timeoutPromise]);
-
-      // Success
+      // Success - email confirmation required
       setLoading(false);
-      alert("✅ Account created! Please check your email to confirm your account.");
+      alert("✅ Account created! Please check your email to confirm your account, then you can log in.");
       router.push("/login");
       
     } catch (e: any) {
