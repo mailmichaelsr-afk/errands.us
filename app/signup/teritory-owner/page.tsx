@@ -84,14 +84,30 @@ export default function TerritoryOwnerSignup() {
     setLoading(true);
     
     try {
-      // Trigger signup - don't wait for confirmation
-      await identity.gotrue.signup(email.trim(), password, {
+      // Step 1: Create Netlify Identity account
+      const signupResult = await identity.gotrue.signup(email.trim(), password, {
         full_name: name.trim(),
         phone: phone.trim(),
         role: "territory_owner",
       });
 
-      // Success - email confirmation required
+      // Step 2: Immediately create DB user
+      if (signupResult && signupResult.id) {
+        await fetch("/.netlify/functions/users-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            netlify_id: signupResult.id,
+            email: email.trim(),
+            full_name: name.trim(),
+            phone: phone.trim(),
+            role: "territory_owner",
+            status: "pending", // Territory owners need approval
+          }),
+        });
+      }
+
+      // Success
       setLoading(false);
       alert("✅ Application submitted! Please check your email to confirm your account. We'll review your application and notify you.");
       router.push("/login");
