@@ -1,5 +1,5 @@
 // netlify/functions/users-create.js
-// Creates DB user record - handles duplicates gracefully
+// Creates DB user record - FIXED column mapping
 
 import { neon } from "@neondatabase/serverless";
 
@@ -33,7 +33,7 @@ export async function handler(event) {
       };
     }
 
-    // Create new user
+    // Create new user - map to correct columns
     const result = await sql`
       INSERT INTO users (
         netlify_id,
@@ -47,13 +47,15 @@ export async function handler(event) {
         ${data.netlify_id},
         ${data.email},
         ${data.full_name || ""},
-        ${data.phone || null},
+        ${data.phone || ""},
         ${data.role || "customer"},
         ${data.status || "active"},
         NOW()
       )
       RETURNING *
     `;
+
+    console.log("User created:", result[0]);
 
     return {
       statusCode: 200,
