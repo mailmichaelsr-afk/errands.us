@@ -4,7 +4,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
 
 type Role = "customer" | "independent_driver" | "territory_owner";
 
@@ -26,11 +25,6 @@ export default function UnifiedSignup() {
   const [error, setError] = useState("");
   const [identity, setIdentity] = useState<any>(null);
   const router = useRouter();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (user) router.replace("/");
-  }, [user, router]);
 
   useEffect(() => {
     (async () => {
