@@ -1,382 +1,422 @@
-// app/runner/page.tsx
+// app/driver/page.tsx - Driver dashboard
 
 "use client";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 
-export default function Runner() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [available, setAvailable] = useState(false);
-  const [note, setNote] = useState("");
-  const [filter, setFilter] = useState<"open" | "all">("open");
+type Request = {
+  id: number;
+  title: string;
+  pickup: string;
+  dropoff: string;
+  status: string;
+  customer_id: number;
+  assigned_to?: number;
+  customer_name?: string;
+  offered_amount?: number;
+  pickup_flexibility?: string;
+  created_at: string;
+  delivery_zip?: string;
+};
 
-  const RUNNER_ID = 1; // placeholder until auth
+export default function DriverDashboard() {
+  const { user, dbUserId, loading } = useAuth();
+  const router = useRouter();
+  
+  const [openRequests, setOpenRequests] = useState<Request[]>([]);
+  const [myJobs, setMyJobs] = useState<Request[]>([]);
+  const [completedJobs, setCompletedJobs] = useState<Request[]>([]);
+  const [tab, setTab] = useState<"available" | "myjobs" | "history">("available");
+  const [loadingData, setLoadingData] = useState(true);
 
-  const load = async () => {
-    const res = await fetch("/.netlify/functions/requests-get");
-    setRequests(await res.json());
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
+  const loadData = async () => {
+    setLoadingData(true);
+    try {
+      const res = await fetch("/.netlify/functions/requests-get");
+      if (res.ok) {
+        const all = await res.json();
+        
+        // Open requests in unclaimed territories (assigned_to is null) 
+        // OR requests specifically assigned to me
+        const open = all.filter((r: Request) => 
+          r.status === 'open' && (!r.assigned_to || r.assigned_to === dbUserId)
+        );
+        setOpenRequests(open);
+        
+        // My active jobs (accepted but not completed)
+        const mine = all.filter((r: Request) => 
+          r.assigned_to === dbUserId && r.status === 'accepted'
+        );
+        setMyJobs(mine);
+        
+        // My completed deliveries
+        const completed = all.filter((r: Request) => 
+          r.assigned_to === dbUserId && r.status === 'completed'
+        );
+        setCompletedJobs(completed);
+      }
+    } catch (e) {
+      console.error("Failed to load:", e);
+    }
+    setLoadingData(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (dbUserId) {
+      loadData();
+      const interval = setInterval(loadData, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [dbUserId]);
 
-  const toggleAvailability = async () => {
-    const next = !available;
-    setAvailable(next);
-    await fetch("/.netlify/functions/availability-set", {
-      method: "POST",
-      body: JSON.stringify({ runner_id: RUNNER_ID, is_available: next, note }),
-    });
+  const acceptRequest = async (requestId: number) => {
+    try {
+      const res = await fetch("/.netlify/functions/requests-accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          request_id: requestId,
+          driver_id: dbUserId 
+        }),
+      });
+
+      if (res.ok) {
+        loadData();
+        alert("✅ Request accepted! Customer has been notified.");
+      } else {
+        alert("❌ Request already accepted by another driver");
+      }
+    } catch (e) {
+      console.error("Accept failed:", e);
+      alert("Failed to accept request");
+    }
   };
 
-  const accept = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    await fetch("/.netlify/functions/requests-accept", {
-      method: "POST",
-      body: JSON.stringify({ id, runner_id: RUNNER_ID }),
-    });
-    load();
-  };
-
-  const complete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const completeRequest = async (requestId: number) => {
+    if (!confirm("Mark this job as completed?")) return;
+    
     await fetch("/.netlify/functions/requests-complete", {
       method: "POST",
-      body: JSON.stringify({ id }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
     });
-    load();
+    
+    loadData();
   };
 
-  const visible = filter === "open"
-    ? requests.filter(r => r.status === "open")
-    : requests;
+  if (loading || loadingData) {
+    return <div style={{padding: '40px', textAlign: 'center'}}>Loading...</div>;
+  }
 
-  const statusColor: Record<string, string> = {
-    open: "#d4f0d4",
-    accepted: "#fdf3cc",
-    completed: "#e8e8e8",
-  };
+  if (!user) return null;
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500&display=swap');
-
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
+        .page { max-width: 800px; margin: 0 auto; padding: 32px 20px; }
+        
+        .header { margin-bottom: 32px; }
+        .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
+        .logo span { color: #7ab87a; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-top: 4px; }
 
-        body {
-          background: #f5f0e8;
-          background-image:
-            radial-gradient(circle at 80% 10%, rgba(255,200,120,0.13) 0%, transparent 50%),
-            radial-gradient(circle at 10% 90%, rgba(134,193,134,0.12) 0%, transparent 50%);
-          min-height: 100vh;
-          font-family: 'DM Sans', sans-serif;
+        .stats {
+          display: grid; grid-template-columns: repeat(3, 1fr);
+          gap: 12px; margin-bottom: 24px;
         }
+        .stat-card {
+          background: #fff; padding: 16px; border-radius: 12px;
+          box-shadow: 0 2px 10px rgba(45,74,45,0.06);
+        }
+        .stat-label { font-size: 0.75rem; color: #999; margin-bottom: 4px; }
+        .stat-value { font-family: 'Fraunces', serif; font-size: 1.5rem; color: #2d4a2d; font-weight: 700; }
 
-        .page { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e0d8cc; }
+        .tab {
+          padding: 12px 20px; background: none; border: none;
+          font-size: 0.9rem; font-weight: 500; color: #666;
+          cursor: pointer; border-bottom: 3px solid transparent;
+          transition: all 0.2s; margin-bottom: -2px;
+        }
+        .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
 
-        .back {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          color: #2d4a2d;
-          text-decoration: none;
-          font-size: 0.9rem;
-          font-weight: 500;
-          margin-bottom: 24px;
-          opacity: 0.7;
-          transition: opacity 0.15s;
+        .card {
+          background: #fff; border-radius: 14px; padding: 20px;
+          margin-bottom: 12px;
+          box-shadow: 0 2px 10px rgba(45,74,45,0.06);
+          cursor: pointer; transition: all 0.2s;
         }
-        .back:hover { opacity: 1; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(45,74,45,0.1); }
+        .card-title { font-weight: 600; font-size: 1rem; color: #1a1a1a; margin-bottom: 8px; }
+        .card-meta { font-size: 0.85rem; color: #999; margin-bottom: 12px; }
+        .card-route { font-size: 0.9rem; color: #555; margin-bottom: 12px; }
+        
+        .btn {
+          padding: 8px 16px; border-radius: 10px; border: none;
+          font-size: 0.85rem; font-weight: 500; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-primary { background: #2d4a2d; color: #f5f0e8; }
+        .btn-primary:hover { background: #3d6b3d; }
+        .btn-success { background: #7ab87a; color: #fff; }
+        .btn-success:hover { background: #5fa05f; }
+        .btn-secondary { background: #f5f0e8; color: #555; }
+        .btn-secondary:hover { background: #e8e0d4; }
 
-        .header { margin-bottom: 28px; }
-        .header h1 {
-          font-family: 'Fraunces', serif;
-          font-size: 2rem;
-          color: #2d4a2d;
-          font-weight: 700;
+        .badge {
+          display: inline-block; padding: 3px 10px; border-radius: 100px;
+          font-size: 0.75rem; font-weight: 500; margin-left: 8px;
         }
-        .header p {
-          color: #888;
-          font-size: 0.9rem;
-          margin-top: 4px;
-        }
+        .badge-open { background: #d4f0d4; color: #2d6a2d; }
+        .badge-accepted { background: #fdf3cc; color: #7a5c00; }
+        .badge-completed { background: #e8e8e8; color: #555; }
 
-        /* Availability toggle */
-        .avail-card {
-          background: #fff;
-          border-radius: 16px;
-          padding: 20px;
-          margin-bottom: 28px;
-          box-shadow: 0 2px 12px rgba(45,74,45,0.07);
-          border: 1px solid rgba(45,74,45,0.06);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .avail-left { display: flex; align-items: center; gap: 14px; }
-        .avail-dot {
-          width: 12px; height: 12px;
-          border-radius: 50%;
-          transition: background 0.3s;
-        }
-        .avail-dot.on { background: #7ab87a; box-shadow: 0 0 0 3px rgba(122,184,122,0.3); }
-        .avail-dot.off { background: #ccc; }
-        .avail-text { font-size: 0.9rem; }
-        .avail-text strong { color: #2d4a2d; display: block; }
-        .avail-text span { color: #999; font-size: 0.8rem; }
+        .empty { text-align: center; padding: 60px 20px; color: #bbb; }
+        .empty-icon { font-size: 3rem; margin-bottom: 12px; }
 
-        .toggle {
-          position: relative;
-          width: 48px; height: 26px;
-          border: none; background: none; cursor: pointer; padding: 0;
-          flex-shrink: 0;
-        }
-        .toggle-track {
-          width: 48px; height: 26px;
-          border-radius: 100px;
-          transition: background 0.25s;
-        }
-        .toggle-track.on { background: #7ab87a; }
-        .toggle-track.off { background: #ddd; }
-        .toggle-thumb {
-          position: absolute;
-          top: 3px; width: 20px; height: 20px;
-          background: #fff;
-          border-radius: 50%;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-          transition: left 0.25s;
-        }
-        .toggle-thumb.on { left: 25px; }
-        .toggle-thumb.off { left: 3px; }
-
-        .note-input {
-          width: 100%;
-          margin-top: 14px;
-          padding: 10px 14px;
-          border: 1.5px solid #e0d8cc;
-          border-radius: 10px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 0.88rem;
-          background: #faf8f4;
-          color: #2d2d2d;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .note-input:focus { border-color: #7ab87a; }
-
-        /* Filters */
-        .filters {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 16px;
-        }
-        .filter-btn {
-          padding: 7px 16px;
-          border-radius: 100px;
-          border: 1.5px solid transparent;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 0.85rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-        .filter-btn.active { background: #2d4a2d; color: #f5f0e8; }
-        .filter-btn.inactive { background: #fff; color: #666; border-color: #e0d8cc; }
-        .filter-btn.inactive:hover { border-color: #7ab87a; color: #2d4a2d; }
-
-        /* Request cards */
-        .req-card {
-          background: #fff;
-          border-radius: 16px;
-          padding: 20px;
-          margin-bottom: 10px;
-          box-shadow: 0 2px 12px rgba(45,74,45,0.06);
-          border: 1px solid rgba(45,74,45,0.05);
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .req-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(45,74,45,0.1);
-        }
-        .req-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 10px;
-        }
-        .req-title {
-          font-weight: 500;
-          font-size: 1rem;
-          color: #1a1a1a;
-        }
-        .status-pill {
-          font-size: 0.73rem;
-          font-weight: 500;
-          padding: 3px 10px;
-          border-radius: 100px;
-          white-space: nowrap;
-        }
-        .req-route {
-          font-size: 0.83rem;
-          color: #888;
-          margin-bottom: 14px;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .req-actions { display: flex; gap: 8px; }
-
-        .btn-accept {
-          flex: 1;
-          padding: 9px;
-          background: #2d4a2d;
-          color: #f5f0e8;
-          border: none;
-          border-radius: 10px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 0.88rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-        .btn-accept:hover { background: #3d6b3d; }
-
-        .btn-complete {
-          flex: 1;
-          padding: 9px;
-          background: #7ab87a;
-          color: #fff;
-          border: none;
-          border-radius: 10px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 0.88rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-        .btn-complete:hover { background: #5fa05f; }
-
-        .btn-view {
-          padding: 9px 14px;
-          background: #f5f0e8;
-          color: #2d4a2d;
-          border: none;
-          border-radius: 10px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 0.88rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-        .btn-view:hover { background: #e8e0d4; }
-
-        .empty {
-          text-align: center;
-          padding: 48px 20px;
-          color: #aaa;
-          font-size: 0.95rem;
-        }
-        .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
-
-        .section-head {
-          font-family: 'Fraunces', serif;
-          font-size: 1.2rem;
-          color: #2d4a2d;
-          margin-bottom: 14px;
-        }
+        .actions { display: flex; gap: 8px; margin-top: 12px; }
       `}</style>
 
       <div className="page">
-        <a href="/" className="back">← Back to Requests</a>
-
         <div className="header">
-          <h1>Runner Dashboard 🏃</h1>
-          <p>Pick up open requests and help your neighbors out</p>
+          <div className="logo">errand<span>s</span></div>
+          <div className="subtitle">Driver Dashboard</div>
         </div>
 
-        {/* Availability */}
-        <div className="avail-card">
-          <div className="avail-left">
-            <div className={`avail-dot ${available ? "on" : "off"}`} />
-            <div className="avail-text">
-              <strong>{available ? "You're available" : "You're offline"}</strong>
-              <span>{available ? "Neighbors can see you" : "Toggle on to start running"}</span>
-            </div>
+        <div className="stats">
+          <div className="stat-card">
+            <div className="stat-label">Available Jobs</div>
+            <div className="stat-value">{openRequests.length}</div>
           </div>
-          <button className="toggle" onClick={toggleAvailability}>
-            <div className={`toggle-track ${available ? "on" : "off"}`} />
-            <div className={`toggle-thumb ${available ? "on" : "off"}`} />
-          </button>
-          {available && (
-            <input
-              className="note-input"
-              placeholder="Optional note (e.g. 'Available until 5pm, can carry heavy items')"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          )}
-        </div>
-
-        {/* Filters */}
-        <div className="filters">
-          <button
-            className={`filter-btn ${filter === "open" ? "active" : "inactive"}`}
-            onClick={() => setFilter("open")}
-          >
-            Open ({requests.filter(r => r.status === "open").length})
-          </button>
-          <button
-            className={`filter-btn ${filter === "all" ? "active" : "inactive"}`}
-            onClick={() => setFilter("all")}
-          >
-            All Requests
-          </button>
-        </div>
-
-        <div className="section-head">
-          {filter === "open" ? "Available to pick up" : "All requests"}
-        </div>
-
-        {visible.length === 0 ? (
-          <div className="empty">
-            <div className="empty-icon">🌿</div>
-            {filter === "open" ? "No open requests right now — check back soon!" : "No requests yet."}
+          <div className="stat-card">
+            <div className="stat-label">My Active Jobs</div>
+            <div className="stat-value">{myJobs.filter(j => j.status === 'accepted').length}</div>
           </div>
-        ) : (
-          visible.map((r) => (
-            <div key={r.id} className="req-card">
-              <div className="req-top">
-                <div className="req-title">{r.title}</div>
-                <span
-                  className="status-pill"
-                  style={{ background: statusColor[r.status] || "#eee" }}
-                >
-                  {r.status}
-                </span>
+          <div className="stat-card">
+            <div className="stat-label">Completed</div>
+            <div className="stat-value">{myJobs.filter(j => j.status === 'completed').length}</div>
+          </div>
+        </div>
+
+        <div className="tabs">
+          <button 
+            className={`tab ${tab === "available" ? "active" : ""}`}
+            onClick={() => setTab("available")}
+          >
+            Available Jobs ({openRequests.length})
+          </button>
+          <button 
+            className={`tab ${tab === "myjobs" ? "active" : ""}`}
+            onClick={() => setTab("myjobs")}
+          >
+            My Jobs ({myJobs.length})
+          </button>
+          <button 
+            className={`tab ${tab === "history" ? "active" : ""}`}
+            onClick={() => setTab("history")}
+          >
+            History ({completedJobs.length})
+          </button>
+        </div>
+
+        {tab === "available" && (
+          <>
+            {openRequests.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📦</div>
+                No available jobs right now. Check back soon!
               </div>
-              <div className="req-route">
-                <span>📍 {r.pickup}</span>
-                <span>→</span>
-                <span>🏠 {r.dropoff}</span>
+            ) : (
+              openRequests.map(r => (
+                <div key={r.id} className="card">
+                  <div className="card-title">
+                    {r.title}
+                    <span className="badge badge-open">Open</span>
+                  </div>
+                  <div className="card-route">
+                    📍 {r.pickup} → 🏠 {r.dropoff}
+                  </div>
+                  <div className="card-meta">
+                    {r.offered_amount && `💰 $${r.offered_amount} • `}
+                    {r.pickup_flexibility === 'asap' && 'ASAP • '}
+                    Posted {new Date(r.created_at).toLocaleDateString()}
+                    {r.delivery_zip && ` • ZIP: ${r.delivery_zip}`}
+                  </div>
+                  <div className="actions">
+                    <button 
+                      className="btn btn-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        acceptRequest(r.id);
+                      }}
+                    >
+                      Accept Job
+                    </button>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/request/${r.id}`);
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {tab === "myjobs" && (
+          <>
+            {myJobs.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📋</div>
+                You haven't accepted any jobs yet
               </div>
-              <div className="req-actions">
-                {r.status === "open" && (
-                  <button className="btn-accept" onClick={(e) => accept(r.id, e)}>
-                    ✋ Accept
-                  </button>
-                )}
-                {r.status === "accepted" && (
-                  <button className="btn-complete" onClick={(e) => complete(r.id, e)}>
-                    ✅ Mark Complete
-                  </button>
-                )}
-                <button className="btn-view" onClick={() => location.href = `/request/${r.id}`}>
-                  💬 Chat
-                </button>
+            ) : (
+              myJobs.map(r => (
+                <div key={r.id} className="card" onClick={() => router.push(`/request/${r.id}`)}>
+                  <div className="card-title">
+                    {r.title}
+                    <span className={`badge badge-${r.status}`}>{r.status}</span>
+                  </div>
+                  <div className="card-route">
+                    📍 {r.pickup} → 🏠 {r.dropoff}
+                  </div>
+                  <div className="card-meta">
+                    {r.offered_amount && `💰 $${r.offered_amount} • `}
+                    {r.customer_name && `Customer: ${r.customer_name} • `}
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </div>
+                  {r.status === 'accepted' && (
+                    <div className="actions">
+                      <button 
+                        className="btn btn-success"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          completeRequest(r.id);
+                        }}
+                      >
+                        Mark Complete
+                      </button>
+                      <button 
+                        className="btn btn-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/request/${r.id}`);
+                        }}
+                      >
+                        Chat
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {tab === "history" && (
+          <>
+            {completedJobs.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">🚗</div>
+                No completed deliveries yet
               </div>
-            </div>
-          ))
+            ) : (
+              <>
+                <div style={{
+                  background: '#f0f7f0',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  marginBottom: '20px',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: '12px'
+                }}>
+                  <div style={{textAlign: 'center'}}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
+                      TOTAL DELIVERIES
+                    </div>
+                    <div style={{
+                      fontFamily: 'Fraunces, serif',
+                      fontSize: '1.8rem',
+                      fontWeight: 700,
+                      color: '#2d4a2d'
+                    }}>
+                      {completedJobs.length}
+                    </div>
+                  </div>
+                  <div style={{textAlign: 'center'}}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
+                      TOTAL EARNED
+                    </div>
+                    <div style={{
+                      fontFamily: 'Fraunces, serif',
+                      fontSize: '1.8rem',
+                      fontWeight: 700,
+                      color: '#2d4a2d'
+                    }}>
+                      ${completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <div style={{textAlign: 'center'}}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
+                      AVG PER DELIVERY
+                    </div>
+                    <div style={{
+                      fontFamily: 'Fraunces, serif',
+                      fontSize: '1.8rem',
+                      fontWeight: 700,
+                      color: '#2d4a2d'
+                    }}>
+                      ${(completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0) / completedJobs.length).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                
+                {completedJobs.map(r => (
+                  <div key={r.id} className="card" onClick={() => router.push(`/request/${r.id}`)}>
+                    <div className="card-title">
+                      {r.title}
+                      <span className="badge" style={{background: '#d4f0d4', color: '#2d6a2d'}}>
+                        ✅ Completed
+                      </span>
+                    </div>
+                    <div className="card-route">
+                      📍 {r.pickup} → 🏠 {r.dropoff}
+                    </div>
+                    <div className="card-meta">
+                      {r.customer_name && `👤 ${r.customer_name} • `}
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </div>
+                    <div style={{
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #f0f0f0',
+                      fontSize: '1.2rem',
+                      fontWeight: 600,
+                      color: '#2d4a2d'
+                    }}>
+                      + ${r.offered_amount?.toFixed(2) || '0.00'}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
     </>
