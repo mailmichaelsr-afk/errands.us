@@ -94,28 +94,42 @@ export default function MerchantsManager() {
   };
 
   const save = async () => {
-    if (!name || !category) return;
+    if (!name || !category) {
+      alert("Name and category are required");
+      return;
+    }
     
     const endpoint = editingId 
       ? "/.netlify/functions/merchants-update"
       : "/.netlify/functions/merchants-create-admin";
     
-    await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: editingId,
-        name,
-        category,
-        address,
-        phone,
-        hours,
-        website,
-      }),
-    });
-    
-    setShowForm(false);
-    loadMerchants();
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingId,
+          name,
+          category,
+          address,
+          phone,
+          hours,
+          website,
+        }),
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed to save merchant: ${error.error || 'Unknown error'}`);
+        return;
+      }
+      
+      setShowForm(false);
+      loadMerchants();
+      alert(`✅ Merchant ${editingId ? 'updated' : 'created'} successfully`);
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    }
   };
 
   const deleteMerchant = async (id: number, name: string) => {
