@@ -16,6 +16,10 @@ type Merchant = {
   website?: string;
   status: string;
   submitted_by: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_by_email?: string;
+  is_personal?: boolean;
 };
 
 const CATEGORIES = [
@@ -457,14 +461,19 @@ export default function MerchantsManager() {
             <div key={m.id} className="card">
               <div className="card-title">
                 {m.name} <span className="badge">Approved</span>
+                {m.is_personal && <span className="badge" style={{background: '#e3f2fd'}}>Personal</span>}
               </div>
               <div className="card-meta">
                 {m.category}
                 {m.address && ` • ${m.address}`}
+                {m.zip && ` • ZIP ${m.zip}`}
                 {m.phone && ` • ${m.phone}`}
-                {m.hours && ` • ${m.hours}`}
-                {m.website && ` • ${m.website}`}
               </div>
+              {m.created_by_name && (
+                <div style={{fontSize: '0.8rem', color: '#999', marginTop: '6px'}}>
+                  Added by: {m.created_by_name} ({m.created_by_email})
+                </div>
+              )}
               <div className="card-actions">
                 <button className="btn btn-secondary btn-small" onClick={() => openEdit(m)}>
                   Edit
@@ -472,6 +481,24 @@ export default function MerchantsManager() {
                 <button className="btn btn-danger btn-small" onClick={() => deleteMerchant(m.id, m.name)}>
                   Delete
                 </button>
+                {m.created_by && (
+                  <button 
+                    className="btn btn-small"
+                    style={{background: '#ff9800', color: '#fff'}}
+                    onClick={async () => {
+                      if (confirm(`Revoke merchant-adding privileges from ${m.created_by_name}?`)) {
+                        await fetch("/.netlify/functions/users-revoke-merchant-access", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ user_id: m.created_by, can_add: false }),
+                        });
+                        alert(`✅ ${m.created_by_name} can no longer add merchants`);
+                      }
+                    }}
+                  >
+                    Revoke Access
+                  </button>
+                )}
               </div>
             </div>
           ))
