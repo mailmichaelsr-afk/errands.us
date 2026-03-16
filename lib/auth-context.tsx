@@ -1,4 +1,4 @@
-// lib/auth-context.tsx - COMPLETE VERSION with isDriver
+// lib/auth-context.tsx - FIXED to work with Netlify Identity
 
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
@@ -37,9 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkUser = async () => {
     try {
-      const res = await fetch("/.netlify/identity/user");
-      if (res.ok) {
-        const netlifyUser = await res.json();
+      const netlifyIdentity = await import("netlify-identity-widget");
+      const identity = netlifyIdentity.default;
+      identity.init({ logo: false });
+
+      // Get current user from Netlify Identity widget
+      const netlifyUser = identity.currentUser();
+      
+      if (netlifyUser) {
         setUser(netlifyUser);
 
         // Get DB user info
@@ -50,6 +55,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserRole(dbUser.role);
         }
       }
+
+      // Listen for login/logout events
+      identity.on("login", async (u: any) => {
+        setUser(u);
+        const dbRes = await fetch(`/.netlify/functions/users-get-by-email?email=${u.email}`);
+        if (dbRes.ok) {
+          const dbUser = await dbRes.json();
+          setDbUserId(dbUser.id);
+          setUserRole(dbUser.role);
+        }
+      });
+
+      identity.on("logout", () => {
+        setUser(null);
+        setDbUserId(null);
+        setUserRole(null);
+      });
+
     } catch (e) {
       console.error("Auth check failed:", e);
     }
@@ -57,10 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/.netlify/identity/logout", { method: "POST" });
-    setUser(null);
-    setDbUserId(null);
-    setUserRole(null);
+    try {
+      const netlifyIdentity = await import("netlify-identity-widget");
+      const identity = netlifyIdentity.default;
+      identity.logout();
+    } catch (e) {
+      console.error("Logout failed:", e);
+    }
   };
 
   const isAdmin = userRole === "admin";
