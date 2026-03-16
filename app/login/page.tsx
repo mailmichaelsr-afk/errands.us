@@ -9,19 +9,28 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
+      setDebugLog(prev => [...prev, "Loading identity widget..."]);
       const netlifyIdentity = await import("netlify-identity-widget");
       const ni = netlifyIdentity.default;
       ni.init({ logo: false });
       setIdentity(ni);
+      setDebugLog(prev => [...prev, "Identity widget loaded"]);
 
       // Redirect on successful login
       ni.on("login", () => {
-        console.log("Login successful, redirecting...");
+        setDebugLog(prev => [...prev, "Login successful!"]);
         ni.close();
         window.location.href = "/";
+      });
+
+      ni.on("error", (err: any) => {
+        setDebugLog(prev => [...prev, `Identity error: ${err.message}`]);
+        setError(err.message || "An error occurred");
+        setLoading(false);
       });
     })();
   }, []);
@@ -30,18 +39,20 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    setDebugLog(prev => [...prev, "Starting login attempt..."]);
 
     try {
       if (!identity) {
-        throw new Error("Still loading, please wait...");
+        throw new Error("Identity widget not loaded yet");
       }
 
-      console.log("Attempting login...");
+      setDebugLog(prev => [...prev, `Calling gotrue.login for ${email}...`]);
       await identity.gotrue.login(email, password, true);
+      setDebugLog(prev => [...prev, "gotrue.login returned successfully"]);
       // Success is handled by the "login" event above
       
     } catch (err: any) {
-      console.error("Login error:", err);
+      setDebugLog(prev => [...prev, `Login failed: ${err.message || err}`]);
       
       // Parse the error message
       let errorMsg = "Login failed. Please try again.";
@@ -107,6 +118,7 @@ export default function Login() {
           background: #faf8f4; 
           outline: none;
           font-family: 'DM Sans', sans-serif;
+          color: #1a1a1a;
         }
         .input:focus { 
           border-color: #7ab87a; 
@@ -156,6 +168,20 @@ export default function Login() {
           font-weight: 500; 
         }
         .link-item a:hover { text-decoration: underline; }
+        .debug {
+          margin-top: 20px;
+          padding: 12px;
+          background: #f0f0f0;
+          border-radius: 8px;
+          font-size: 0.75rem;
+          font-family: monospace;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+        .debug-line {
+          margin: 4px 0;
+          color: #333;
+        }
       `}</style>
 
       <div className="card">
@@ -203,6 +229,15 @@ export default function Login() {
             Don't have an account? <a href="/signup">Sign up</a>
           </div>
         </div>
+
+        {debugLog.length > 0 && (
+          <div className="debug">
+            <div style={{fontWeight: 'bold', marginBottom: '8px'}}>Debug Log:</div>
+            {debugLog.map((log, i) => (
+              <div key={i} className="debug-line">{log}</div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );
