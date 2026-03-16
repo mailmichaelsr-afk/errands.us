@@ -1,4 +1,4 @@
-// app/page.tsx - FINAL VERSION with driver link
+// app/page.tsx - Complete with structured addresses and merchant dropdown
 
 "use client";
 import { useEffect, useState } from "react";
@@ -38,7 +38,7 @@ const US_STATES = [
 ];
 
 export default function Home() {
-  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, isDriver, loading, logout } = useAuth();
+  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
   const router = useRouter();
   
   const [allRequests, setAllRequests] = useState<Request[]>([]);
@@ -80,28 +80,24 @@ export default function Home() {
     }
   }, [user, loading, router]);
 
-  // Fetch merchants when delivery ZIP changes
+  // Load all merchants on page load
   useEffect(() => {
-    const fetchMerchants = async () => {
-      if (deliveryZip.length === 5) {
-        try {
-          const res = await fetch(`/.netlify/functions/merchants-by-zip?zip=${deliveryZip}`);
-          if (res.ok) {
-            const data = await res.json();
-            setTerritory(data.territory);
-            setAvailableMerchants(data.merchants);
-          }
-        } catch (e) {
-          console.error("Failed to load merchants:", e);
+    const fetchAllMerchants = async () => {
+      try {
+        const res = await fetch("/.netlify/functions/merchants-get-all");
+        if (res.ok) {
+          const merchants = await res.json();
+          // Filter to only approved merchants
+          const approved = merchants.filter((m: any) => m.status === 'approved');
+          setAvailableMerchants(approved);
         }
-      } else {
-        setAvailableMerchants([]);
-        setTerritory(null);
+      } catch (e) {
+        console.error("Failed to load merchants:", e);
       }
     };
     
-    fetchMerchants();
-  }, [deliveryZip]);
+    fetchAllMerchants();
+  }, []);
 
   // Auto-fill pickup address when merchant selected
   useEffect(() => {
@@ -499,11 +495,9 @@ export default function Home() {
                   📊 Owner Dashboard
                 </div>
               )}
-              {isDriver && (
-                <div className="dropdown-item" onClick={() => router.push('/driver')}>
-                  🚗 Driver Dashboard
-                </div>
-              )}
+              <div className="dropdown-item" onClick={() => router.push('/profile')}>
+                👤 Profile & Settings
+              </div>
               <div className="dropdown-item" onClick={() => router.push('/directory')}>
                 🏪 Merchants
               </div>
