@@ -10,6 +10,7 @@ type Merchant = {
   name: string;
   category: string;
   address?: string;
+  zip?: string;
   phone?: string;
   hours?: string;
   website?: string;
@@ -38,12 +39,16 @@ export default function MerchantsManager() {
   const router = useRouter();
   
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [territories, setTerritories] = useState<any[]>([]);
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<number | null>(null);
+  const [selectedTerritoryZip, setSelectedTerritoryZip] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   
   const [name, setName] = useState("");
   const [category, setCategory] = useState("grocery");
   const [address, setAddress] = useState("");
+  const [zip, setZip] = useState("");
   const [phone, setPhone] = useState("");
   const [hours, setHours] = useState("");
   const [website, setWebsite] = useState("");
@@ -67,14 +72,38 @@ export default function MerchantsManager() {
     setLoadingData(false);
   };
 
+  const loadTerritories = async () => {
+    try {
+      const res = await fetch("/.netlify/functions/territories-get");
+      if (res.ok) {
+        const data = await res.json();
+        setTerritories(data);
+        // Auto-select first territory
+        if (data.length > 0 && !selectedTerritoryId) {
+          const firstTerritory = data[0];
+          setSelectedTerritoryId(firstTerritory.id);
+          // Get first ZIP from zip_codes array
+          const firstZip = firstTerritory.zip_codes?.[0] || "";
+          setSelectedTerritoryZip(firstZip);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load territories:", e);
+    }
+  };
+
   useEffect(() => {
-    if (isAdmin) loadMerchants();
+    if (isAdmin) {
+      loadMerchants();
+      loadTerritories();
+    }
   }, [isAdmin]);
 
   const openAdd = () => {
     setName("");
     setCategory("grocery");
     setAddress("");
+    setZip(selectedTerritoryZip); // Auto-fill from selected territory
     setPhone("");
     setHours("");
     setWebsite("");
@@ -86,6 +115,7 @@ export default function MerchantsManager() {
     setName(m.name);
     setCategory(m.category);
     setAddress(m.address || "");
+    setZip(m.zip || "");
     setPhone(m.phone || "");
     setHours(m.hours || "");
     setWebsite(m.website || "");
@@ -271,6 +301,42 @@ export default function MerchantsManager() {
           </button>
         </div>
 
+        <div style={{
+          background: '#fff', 
+          padding: '16px', 
+          borderRadius: '12px', 
+          marginBottom: '20px',
+          border: '2px solid #7ab87a'
+        }}>
+          <div style={{fontWeight: 600, marginBottom: 8, color: '#2d4a2d'}}>
+            Working in Territory:
+          </div>
+          <select 
+            className="select"
+            value={selectedTerritoryId || ''}
+            onChange={(e) => {
+              const terrId = parseInt(e.target.value);
+              setSelectedTerritoryId(terrId);
+              const territory = territories.find(t => t.id === terrId);
+              const firstZip = territory?.zip_codes?.[0] || "";
+              setSelectedTerritoryZip(firstZip);
+            }}
+            style={{marginBottom: 0}}
+          >
+            <option value="">Select territory...</option>
+            {territories.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name} - {t.zip_codes?.join(', ')}
+              </option>
+            ))}
+          </select>
+          {selectedTerritoryZip && (
+            <div style={{marginTop: 8, fontSize: '0.85rem', color: '#666'}}>
+              New merchants will be added with ZIP: <strong>{selectedTerritoryZip}</strong>
+            </div>
+          )}
+        </div>
+
         {showForm && (
           <div className="form-card">
             <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 16, color: '#2d4a2d' }}>
@@ -303,6 +369,15 @@ export default function MerchantsManager() {
               placeholder="123 Main St"
               value={address}
               onChange={e => setAddress(e.target.value)}
+            />
+            
+            <div className="label">ZIP Code * (from territory: {selectedTerritoryZip || 'not selected'})</div>
+            <input
+              className="input"
+              placeholder="ZIP Code"
+              value={zip}
+              onChange={e => setZip(e.target.value)}
+              style={{background: '#f0f7f0'}}
             />
             
             <div className="grid-2">
