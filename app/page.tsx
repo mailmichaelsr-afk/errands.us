@@ -45,6 +45,7 @@ export default function Home() {
   const [myRequests, setMyRequests] = useState<Request[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [requestFilter, setRequestFilter] = useState("all"); // all, open, accepted, completed
   
   // Form fields
   const [title, setTitle] = useState("");
@@ -247,6 +248,22 @@ export default function Home() {
     }
   };
 
+  const reorderRequest = (req: any) => {
+    // Pre-fill form with previous order data
+    setTitle(req.title);
+    setOfferedAmount(req.offered_amount?.toString() || "");
+    setDeliveryStreet(req.delivery_street || "");
+    setDeliveryCity(req.delivery_city || "");
+    setDeliveryState(req.delivery_state || "");
+    setDeliveryZip(req.delivery_zip || "");
+    setPickupStreet(req.pickup_street || "");
+    setPickupCity(req.pickup_city || "");
+    setPickupState(req.pickup_state || "");
+    setPickupZip(req.pickup_zip || "");
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleLogout = () => {
     logout();
     router.push("/login");
@@ -270,6 +287,10 @@ export default function Home() {
   if (!user) return null;
 
   const displayRequests = isTerritoryOwner ? allRequests : myRequests;
+  const filteredRequests = displayRequests.filter(r => {
+    if (requestFilter === "all") return true;
+    return r.status === requestFilter;
+  });
 
   const getStatusInfo = (status: string) => {
     const info: Record<string, { label: string; color: string; bg: string }> = {
@@ -768,14 +789,85 @@ export default function Home() {
           <div className="card-title">
             {isCustomer ? "My Requests" : "All Requests"}
           </div>
-          {displayRequests.length === 0 ? (
+          
+          {isCustomer && (
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              marginBottom: '16px',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                onClick={() => setRequestFilter("all")}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: '1.5px solid #e0d8cc',
+                  background: requestFilter === "all" ? '#2d4a2d' : '#faf8f4',
+                  color: requestFilter === "all" ? '#f5f0e8' : '#555',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                All ({displayRequests.length})
+              </button>
+              <button
+                onClick={() => setRequestFilter("open")}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: '1.5px solid #e0d8cc',
+                  background: requestFilter === "open" ? '#2d4a2d' : '#faf8f4',
+                  color: requestFilter === "open" ? '#f5f0e8' : '#555',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Open ({displayRequests.filter(r => r.status === 'open').length})
+              </button>
+              <button
+                onClick={() => setRequestFilter("accepted")}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: '1.5px solid #e0d8cc',
+                  background: requestFilter === "accepted" ? '#2d4a2d' : '#faf8f4',
+                  color: requestFilter === "accepted" ? '#f5f0e8' : '#555',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                In Progress ({displayRequests.filter(r => r.status === 'accepted').length})
+              </button>
+              <button
+                onClick={() => setRequestFilter("completed")}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: '1.5px solid #e0d8cc',
+                  background: requestFilter === "completed" ? '#2d4a2d' : '#faf8f4',
+                  color: requestFilter === "completed" ? '#f5f0e8' : '#555',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Completed ({displayRequests.filter(r => r.status === 'completed').length})
+              </button>
+            </div>
+          )}
+          
+          {filteredRequests.length === 0 ? (
             <div className="empty">
               <div className="empty-icon">📦</div>
               {isCustomer ? "You haven't posted any requests yet." : "No requests yet."}
             </div>
           ) : (
             <div className="req-list">
-              {displayRequests.slice(0, 20).map(r => {
+              {filteredRequests.slice(0, 20).map(r => {
                 const statusInfo = getStatusInfo(r.status);
                 const hasMessages = (r.message_count || 0) > 0;
                 
@@ -818,6 +910,16 @@ export default function Home() {
                           }}>
                           💬 Chat
                         </button>
+                        {isCustomer && r.status === 'completed' && (
+                          <button className="chat-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reorderRequest(r);
+                            }}
+                            style={{background: '#7ab87a', color: '#fff'}}>
+                            🔄 Order Again
+                          </button>
+                        )}
                         {isAdmin && (
                           <button className="btn btn-danger btn-small"
                             onClick={(e) => {
