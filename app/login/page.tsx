@@ -49,6 +49,13 @@ export default function Login() {
       setDebugLog(prev => [...prev, `Calling gotrue.login for ${email}...`]);
       await identity.gotrue.login(email, password, true);
       setDebugLog(prev => [...prev, "gotrue.login returned successfully"]);
+      
+      // Fallback: if login event doesn't fire in 2 seconds, redirect anyway
+      setTimeout(() => {
+        setDebugLog(prev => [...prev, "Timeout reached, forcing redirect..."]);
+        window.location.href = "/";
+      }, 2000);
+      
       // Success is handled by the "login" event above
       
     } catch (err: any) {
