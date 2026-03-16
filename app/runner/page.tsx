@@ -1,4 +1,4 @@
-// app/driver/page.tsx - Driver dashboard
+// app/runner/page.tsx - Driver dashboard
 
 "use client";
 import { useEffect, useState } from "react";
@@ -27,8 +27,21 @@ export default function DriverDashboard() {
   const [openRequests, setOpenRequests] = useState<Request[]>([]);
   const [myJobs, setMyJobs] = useState<Request[]>([]);
   const [completedJobs, setCompletedJobs] = useState<Request[]>([]);
-  const [tab, setTab] = useState<"available" | "myjobs" | "history">("available");
+  const [merchants, setMerchants] = useState<any[]>([]);
+  const [tab, setTab] = useState<"available" | "myjobs" | "history" | "merchants">("available");
   const [loadingData, setLoadingData] = useState(true);
+  
+  // Merchant form state
+  const [userZip, setUserZip] = useState("");
+  const [canAddMerchants, setCanAddMerchants] = useState(true);
+  const [showMerchantForm, setShowMerchantForm] = useState(false);
+  const [merchantName, setMerchantName] = useState("");
+  const [merchantCategory, setMerchantCategory] = useState("grocery");
+  const [merchantAddress, setMerchantAddress] = useState("");
+  const [merchantZip, setMerchantZip] = useState("");
+  const [merchantPhone, setMerchantPhone] = useState("");
+  const [merchantHours, setMerchantHours] = useState("");
+  const [merchantWebsite, setMerchantWebsite] = useState("");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -39,6 +52,25 @@ export default function DriverDashboard() {
   const loadData = async () => {
     setLoadingData(true);
     try {
+      // Get user info first
+      const userRes = await fetch(`/.netlify/functions/users-get?id=${dbUserId}`);
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUserZip(userData.zip || "");
+        setCanAddMerchants(userData.can_add_merchants !== false);
+        
+        // Load merchants for user's ZIP
+        if (userData.zip) {
+          const merchRes = await fetch(
+            `/.netlify/functions/merchants-get-for-user?user_id=${dbUserId}&zip=${userData.zip}`
+          );
+          if (merchRes.ok) {
+            setMerchants(await merchRes.json());
+          }
+        }
+      }
+      
+      // Load requests
       const res = await fetch("/.netlify/functions/requests-get");
       if (res.ok) {
         const all = await res.json();
@@ -106,6 +138,71 @@ export default function DriverDashboard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request_id: requestId }),
+    });
+    
+    loadData();
+  };
+
+  const openMerchantForm = () => {
+    setMerchantName("");
+    setMerchantCategory("grocery");
+    setMerchantAddress("");
+    setMerchantZip(userZip);
+    setMerchantPhone("");
+    setMerchantHours("");
+    setMerchantWebsite("");
+    setShowMerchantForm(true);
+  };
+
+  const saveMerchant = async () => {
+    if (!merchantName || !merchantCategory || !merchantZip) {
+      alert("Name, category, and ZIP are required");
+      return;
+    }
+
+    try {
+      const res = await fetch("/.netlify/functions/merchants-create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: dbUserId,
+          name: merchantName,
+          category: merchantCategory,
+          address: merchantAddress,
+          zip: merchantZip,
+          phone: merchantPhone,
+          hours: merchantHours,
+          website: merchantWebsite,
+          user_zip: userZip,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed: ${error.error}`);
+        return;
+      }
+
+      setShowMerchantForm(false);
+      loadData();
+      
+      const isPersonal = merchantZip !== userZip;
+      alert(isPersonal 
+        ? `✅ Added to your personal list`
+        : `✅ Added! Everyone in ZIP ${merchantZip} can see it.`
+      );
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    }
+  };
+
+  const hideMerchant = async (merchantId: number, merchantName: string) => {
+    if (!confirm(`Remove "${merchantName}"? (Won't delete for others)`)) return;
+
+    await fetch("/.netlify/functions/merchants-hide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: dbUserId, merchant_id: merchantId }),
     });
     
     loadData();
@@ -226,6 +323,12 @@ export default function DriverDashboard() {
             onClick={() => setTab("history")}
           >
             History ({completedJobs.length})
+          </button>
+          <button 
+            className={`tab ${tab === "merchants" ? "active" : ""}`}
+            onClick={() => setTab("merchants")}
+          >
+            Merchants ({merchants.length})
           </button>
         </div>
 
@@ -415,6 +518,180 @@ export default function DriverDashboard() {
                   </div>
                 ))}
               </>
+            )}
+          </>
+        )}
+
+        {tab === "merchants" && (
+          <>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+              <div style={{fontSize: '1.1rem', fontWeight: 600, color: '#2d4a2d'}}>
+                My Merchant List
+              </div>
+              {canAddMerchants && (
+                <button className="btn btn-primary" onClick={openMerchantForm}>
+                  + Add Merchant
+                </button>
+              )}
+            </div>
+
+            {!canAddMerchants && (
+              <div style={{
+                background: '#fff3cd',
+                border: '1px solid #ffc107',
+                color: '#856404',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                fontSize: '0.9rem'
+              }}>
+                ⚠️ You cannot add merchants. Contact support if this is an error.
+              </div>
+            )}
+
+            {showMerchantForm && (
+              <div style={{
+                background: '#fff',
+                borderRadius: '14px',
+                padding: '20px',
+                marginBottom: '20px',
+                boxShadow: '0 2px 10px rgba(45,74,45,0.1)'
+              }}>
+                <div style={{fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: '#2d4a2d'}}>
+                  Add Merchant
+                </div>
+                
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    marginBottom: '12px',
+                    border: '1.5px solid #e0d8cc',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem'
+                  }}
+                  placeholder="Business Name *"
+                  value={merchantName}
+                  onChange={e => setMerchantName(e.target.value)}
+                />
+
+                <select
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    marginBottom: '12px',
+                    border: '1.5px solid #e0d8cc',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem'
+                  }}
+                  value={merchantCategory}
+                  onChange={e => setMerchantCategory(e.target.value)}
+                >
+                  <option value="grocery">grocery</option>
+                  <option value="restaurant">restaurant</option>
+                  <option value="cafe">cafe</option>
+                  <option value="pharmacy">pharmacy</option>
+                  <option value="convenience_store">convenience_store</option>
+                  <option value="clothing_store">clothing_store</option>
+                  <option value="pet_store">pet_store</option>
+                  <option value="hardware">hardware</option>
+                  <option value="salon">salon</option>
+                  <option value="gas_station">gas_station</option>
+                  <option value="dry_cleaning">dry_cleaning</option>
+                  <option value="shipping">shipping</option>
+                  <option value="other">other</option>
+                </select>
+
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    marginBottom: '12px',
+                    border: '1.5px solid #e0d8cc',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem'
+                  }}
+                  placeholder="ZIP Code *"
+                  value={merchantZip}
+                  onChange={e => setMerchantZip(e.target.value)}
+                />
+                {merchantZip !== userZip && merchantZip.length === 5 && (
+                  <div style={{fontSize: '0.85rem', color: '#856404', marginBottom: '12px'}}>
+                    ℹ️ Outside your area - will be personal only
+                  </div>
+                )}
+
+                <input
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    marginBottom: '12px',
+                    border: '1.5px solid #e0d8cc',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem'
+                  }}
+                  placeholder="Address"
+                  value={merchantAddress}
+                  onChange={e => setMerchantAddress(e.target.value)}
+                />
+
+                <div style={{display: 'flex', gap: '8px', marginTop: '16px'}}>
+                  <button className="btn btn-success" onClick={saveMerchant}>
+                    Save
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setShowMerchantForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {merchants.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">🏪</div>
+                No merchants yet. Add your first one!
+              </div>
+            ) : (
+              merchants.map((m: any) => (
+                <div key={m.id} style={{
+                  background: '#fff',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  marginBottom: '12px',
+                  boxShadow: '0 2px 8px rgba(45,74,45,0.06)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{fontWeight: 600, fontSize: '1rem', color: '#1a1a1a', marginBottom: '4px'}}>
+                      {m.name}
+                      {m.is_personal && (
+                        <span style={{
+                          background: '#e3f2fd',
+                          color: '#1976d2',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          marginLeft: '8px'
+                        }}>
+                          Personal
+                        </span>
+                      )}
+                    </div>
+                    <div style={{fontSize: '0.85rem', color: '#666'}}>
+                      {m.category} • {m.zip}
+                      {m.address && ` • ${m.address}`}
+                    </div>
+                  </div>
+                  <button 
+                    className="btn btn-danger btn-small"
+                    onClick={() => hideMerchant(m.id, m.name)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
             )}
           </>
         )}
