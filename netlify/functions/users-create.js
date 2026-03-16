@@ -42,6 +42,11 @@ export async function handler(event) {
         phone,
         role,
         status,
+        street,
+        city,
+        state,
+        zip,
+        delivery_instructions,
         created_at
       ) VALUES (
         ${data.netlify_id},
@@ -50,6 +55,11 @@ export async function handler(event) {
         ${data.phone || ""},
         ${data.role || "customer"},
         ${data.status || "active"},
+        ${data.street || ""},
+        ${data.city || ""},
+        ${data.state || ""},
+        ${data.zip || ""},
+        ${data.delivery_instructions || ""},
         NOW()
       )
       RETURNING *
