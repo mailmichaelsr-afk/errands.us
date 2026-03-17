@@ -21,11 +21,17 @@ exports.handler = async (event) => {
         r.*,
         c.full_name as customer_name,
         c.email as customer_email,
+        c.phone as customer_phone,
         u.full_name as runner_name,
-        u.email as runner_email
+        u.email as runner_email,
+        m.name as merchant_name,
+        m.address as merchant_address,
+        m.phone as merchant_phone,
+        m.hours as merchant_hours
       FROM requests r
       LEFT JOIN users c ON r.customer_id = c.id
       LEFT JOIN users u ON r.assigned_to = u.id
+      LEFT JOIN merchants m ON r.merchant_id = m.id
       ORDER BY r.created_at DESC
     `;
 
