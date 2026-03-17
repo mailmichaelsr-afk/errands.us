@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import NotificationBell from "@/components/NotificationBell";
 
 
 type Request = {
@@ -288,6 +289,7 @@ export default function RunnerDashboard() {
             <button className="refresh-btn" onClick={() => loadData(true)} disabled={refreshing}>
               {refreshing ? '⟳' : '↻'} Refresh
             </button>
+            {dbUserId && <NotificationBell userId={dbUserId} role="runner" />}
             <button className="back-btn" onClick={() => router.push('/')}>← Home</button>
           </div>
         </div>
