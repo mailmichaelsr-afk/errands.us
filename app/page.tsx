@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
-import NotificationBell from "@/components/NotificationBell";
+
 
 type Request = {
   id: number;
@@ -544,7 +544,6 @@ export default function Home() {
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
           <div className="user-header-right">
-            {dbUserId && <NotificationBell userId={dbUserId} role={notifRole} />}
             <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
               Menu ▼
             </button>
