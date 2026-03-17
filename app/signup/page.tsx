@@ -142,6 +142,7 @@ export default function UnifiedSignup() {
             radial-gradient(circle at 80% 80%, rgba(255,200,120,0.12) 0%, transparent 50%);
           min-height: 100vh; font-family: 'DM Sans', sans-serif;
           display: flex; align-items: center; justify-content: center; padding: 20px;
+          color: #1a1a1a;
         }
         .card {
           background: #fff; border-radius: 20px; padding: 36px 28px;
@@ -156,6 +157,7 @@ export default function UnifiedSignup() {
           flex: 1; padding: 12px; border: 2px solid #e0d8cc; border-radius: 10px;
           background: #faf8f4; cursor: pointer; transition: all 0.2s;
           font-family: 'DM Sans', sans-serif; font-size: 0.85rem; text-align: center;
+          color: #2d4a2d;
         }
         .role-btn:hover { border-color: #7ab87a; }
         .role-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; font-weight: 600; }
