@@ -43,6 +43,7 @@ exports.handler = async (event) => {
     const deliveryFlexibility = body.delivery_flexibility || body.deliveryFlexibility || 'asap';
     const preferredDeliveryTime = body.preferred_delivery_time || body.preferredDeliveryTime || null;
     const merchantId = body.merchant_id || body.merchantId || null;
+    const requestType = body.request_type || 'delivery';
 
     if (!customerId || !title) {
       return {
@@ -54,7 +55,7 @@ exports.handler = async (event) => {
 
     const sql = neon(process.env.DATABASE_URL);
 
-    // Find territory owner for this ZIP (for notifications only — NOT for assignment)
+    // Find territory owner for this ZIP (notifications only — NOT assignment)
     let territoryOwnerId = null;
     if (deliveryZip) {
       const territories = await sql`
@@ -70,7 +71,7 @@ exports.handler = async (event) => {
       }
     }
 
-    // Create the request — assigned_to is always null, status always open
+    // Create the request — assigned_to is always null
     const result = await sql`
       INSERT INTO requests (
         customer_id, title,
@@ -78,14 +79,14 @@ exports.handler = async (event) => {
         delivery_street, delivery_city, delivery_state, delivery_zip,
         delivery_instructions, offered_amount, payment_method,
         pickup_flexibility, delivery_flexibility, preferred_delivery_time,
-        merchant_id, assigned_to, status
+        merchant_id, request_type, assigned_to, status
       ) VALUES (
         ${customerId}, ${title},
         ${pickupStreet}, ${pickupCity}, ${pickupState}, ${pickupZip},
         ${deliveryStreet}, ${deliveryCity}, ${deliveryState}, ${deliveryZip},
         ${deliveryInstructions}, ${offeredAmount}, ${paymentMethod},
         ${pickupFlexibility}, ${deliveryFlexibility}, ${preferredDeliveryTime},
-        ${merchantId}, null, 'open'
+        ${merchantId}, ${requestType}, null, 'open'
       )
       RETURNING *
     `;
@@ -100,11 +101,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({
-        success: true,
-        id: newRequest.id,
-        ...newRequest
-      })
+      body: JSON.stringify({ success: true, id: newRequest.id, ...newRequest })
     };
   } catch (err) {
     console.error('requests-create error:', err);
@@ -119,12 +116,8 @@ exports.handler = async (event) => {
 async function firePushNotifications(request, territoryOwnerId, sql) {
   const targetUserIds = new Set();
 
-  // Always notify territory owner if one exists
-  if (territoryOwnerId) {
-    targetUserIds.add(territoryOwnerId);
-  }
+  if (territoryOwnerId) targetUserIds.add(territoryOwnerId);
 
-  // Also notify all active runners
   const runners = await sql`
     SELECT id FROM users WHERE role = 'runner' AND status = 'active'
   `;
