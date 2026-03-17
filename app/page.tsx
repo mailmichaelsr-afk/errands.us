@@ -1,9 +1,10 @@
-// app/page.tsx - Complete with structured addresses and merchant dropdown
+// app/page.tsx - With profile address auto-fill + notification bell
 
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import NotificationBell from "@/components/NotificationBell";
 
 type Request = {
   id: number;
@@ -45,7 +46,14 @@ export default function Home() {
   const [myRequests, setMyRequests] = useState<Request[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [requestFilter, setRequestFilter] = useState("all"); // all, open, accepted, completed
+  const [requestFilter, setRequestFilter] = useState("all");
+
+  // Saved profile address (loaded once)
+  const [profileStreet, setProfileStreet] = useState("");
+  const [profileCity, setProfileCity] = useState("");
+  const [profileState, setProfileState] = useState("");
+  const [profileZip, setProfileZip] = useState("");
+  const [profileDeliveryInstructions, setProfileDeliveryInstructions] = useState("");
   
   // Form fields
   const [title, setTitle] = useState("");
@@ -57,6 +65,8 @@ export default function Home() {
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryZip, setDeliveryZip] = useState("");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [usingProfileAddress, setUsingProfileAddress] = useState(true);
   const [pickupFlexibility, setPickupFlexibility] = useState("flexible");
   const [pickupTime, setPickupTime] = useState("");
   const [deliveryFlexibility, setDeliveryFlexibility] = useState("flexible");
@@ -74,21 +84,51 @@ export default function Home() {
   
   const [submitting, setSubmitting] = useState(false);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
     }
   }, [user, loading, router]);
 
-  // Load all merchants on page load
+  // Load user's profile address
+  useEffect(() => {
+    if (!dbUserId) return;
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`/.netlify/functions/users-get?id=${dbUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const street = data.street || "";
+          const city = data.city || "";
+          const state = data.state || "";
+          const zip = data.zip || "";
+          const instructions = data.delivery_instructions || "";
+          setProfileStreet(street);
+          setProfileCity(city);
+          setProfileState(state);
+          setProfileZip(zip);
+          setProfileDeliveryInstructions(instructions);
+          // Pre-fill form with profile address
+          setDeliveryStreet(street);
+          setDeliveryCity(city);
+          setDeliveryState(state);
+          setDeliveryZip(zip);
+          setDeliveryInstructions(instructions);
+        }
+      } catch (e) {
+        console.error("Failed to load profile:", e);
+      }
+    };
+    fetchProfile();
+  }, [dbUserId]);
+
+  // Load merchants
   useEffect(() => {
     const fetchAllMerchants = async () => {
       try {
         const res = await fetch("/.netlify/functions/merchants-get-all");
         if (res.ok) {
           const merchants = await res.json();
-          // Filter to only approved merchants
           const approved = merchants.filter((m: any) => m.status === 'approved');
           setAvailableMerchants(approved);
         }
@@ -96,7 +136,6 @@ export default function Home() {
         console.error("Failed to load merchants:", e);
       }
     };
-    
     fetchAllMerchants();
   }, []);
 
@@ -114,13 +153,20 @@ export default function Home() {
     }
   }, [selectedMerchant, availableMerchants]);
 
+  const useProfileAddress = () => {
+    setDeliveryStreet(profileStreet);
+    setDeliveryCity(profileCity);
+    setDeliveryState(profileState);
+    setDeliveryZip(profileZip);
+    setDeliveryInstructions(profileDeliveryInstructions);
+    setUsingProfileAddress(true);
+  };
+
   const load = async () => {
     try {
       const res = await fetch("/.netlify/functions/requests-get");
       if (res.ok) {
         const data = await res.json();
-        
-        // Load message counts for each request
         const requestsWithMessages = await Promise.all(
           data.map(async (req: Request) => {
             try {
@@ -133,16 +179,11 @@ export default function Home() {
                   last_message: messages.length > 0 ? messages[messages.length - 1].body : null
                 };
               }
-            } catch (e) {
-              console.error(`Failed to load messages for request ${req.id}:`, e);
-            }
+            } catch (e) {}
             return req;
           })
         );
-        
         setAllRequests(requestsWithMessages);
-        
-        // Filter to show only user's requests if customer
         if (dbUserId) {
           const mine = requestsWithMessages.filter((r: Request) => r.customer_id === dbUserId);
           setMyRequests(mine);
@@ -167,7 +208,6 @@ export default function Home() {
       alert("Title and delivery ZIP code are required");
       return;
     }
-
     setSubmitting(true);
     try {
       const res = await fetch("/.netlify/functions/requests-create", {
@@ -185,6 +225,7 @@ export default function Home() {
           delivery_city: deliveryCity,
           delivery_state: deliveryState,
           delivery_zip: deliveryZip,
+          delivery_instructions: deliveryInstructions,
           pickup_time: pickupTime || null,
           pickup_flexibility: pickupFlexibility,
           delivery_time: deliveryTime || null,
@@ -197,29 +238,18 @@ export default function Home() {
 
       if (res.ok) {
         const newRequest = await res.json();
-        
-        // Clear form
+        // Reset form but keep profile address ready for next time
         setTitle("");
-        setPickupStreet("");
-        setPickupCity("");
-        setPickupState("");
-        setPickupZip("");
-        setDeliveryStreet("");
-        setDeliveryCity("");
-        setDeliveryState("");
-        setDeliveryZip("");
-        setPickupTime("");
-        setDeliveryTime("");
-        setOfferedAmount("");
-        setPaymentNotes("");
-        setSelectedMerchant(null);
-        setUseCustomPickup(false);
-        setShowDetails(false);
-        setShowForm(false);
-        
+        setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip("");
+        setDeliveryStreet(profileStreet); setDeliveryCity(profileCity);
+        setDeliveryState(profileState); setDeliveryZip(profileZip);
+        setDeliveryInstructions(profileDeliveryInstructions);
+        setUsingProfileAddress(true);
+        setPickupTime(""); setDeliveryTime(""); setOfferedAmount(""); setPaymentNotes("");
+        setSelectedMerchant(null); setUseCustomPickup(false);
+        setShowDetails(false); setShowForm(false);
         await load();
-        
-        if (confirm("✅ Request posted! Click OK to view and chat with your territory owner.")) {
+        if (confirm("✅ Request posted! Click OK to view and chat with your runner.")) {
           router.push(`/request/${newRequest.id}`);
         }
       } else {
@@ -234,7 +264,6 @@ export default function Home() {
 
   const deleteRequest = async (id: number, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
-    
     try {
       await fetch("/.netlify/functions/requests-delete", {
         method: "POST",
@@ -243,23 +272,23 @@ export default function Home() {
       });
       load();
     } catch (e) {
-      console.error("Delete failed:", e);
       alert("Failed to delete request");
     }
   };
 
   const reorderRequest = (req: any) => {
-    // Pre-fill form with previous order data
     setTitle(req.title);
     setOfferedAmount(req.offered_amount?.toString() || "");
     setDeliveryStreet(req.delivery_street || "");
     setDeliveryCity(req.delivery_city || "");
     setDeliveryState(req.delivery_state || "");
     setDeliveryZip(req.delivery_zip || "");
+    setDeliveryInstructions(req.delivery_instructions || "");
     setPickupStreet(req.pickup_street || "");
     setPickupCity(req.pickup_city || "");
     setPickupState(req.pickup_state || "");
     setPickupZip(req.pickup_zip || "");
+    setUsingProfileAddress(false);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -272,11 +301,8 @@ export default function Home() {
   if (loading) {
     return (
       <div style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#f5f0e8",
+        minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", background: "#f5f0e8",
         fontFamily: "'DM Sans', sans-serif"
       }}>
         Loading...
@@ -300,6 +326,9 @@ export default function Home() {
     };
     return info[status] || { label: status, color: "#555", bg: "#eee" };
   };
+
+  const userRole = isAdmin ? 'admin' : isTerritoryOwner ? 'owner' : 'customer';
+  const hasProfileAddress = !!(profileStreet && profileZip);
 
   return (
     <>
@@ -326,11 +355,11 @@ export default function Home() {
           margin-bottom: 20px; position: relative;
         }
         .user-info { font-size: 0.88rem; color: #666; }
+        .user-header-right { display: flex; align-items: center; gap: 8px; }
         .user-menu-btn {
           background: #f5f0e8; border: 1.5px solid #e0d8cc;
           padding: 8px 12px; border-radius: 8px; cursor: pointer;
-          font-size: 0.85rem; font-weight: 500; color: #2d4a2d;
-          transition: all 0.2s;
+          font-size: 0.85rem; font-weight: 500; color: #2d4a2d; transition: all 0.2s;
         }
         .user-menu-btn:hover { background: #e8e0d4; }
         .user-dropdown {
@@ -341,8 +370,7 @@ export default function Home() {
         }
         .dropdown-item {
           padding: 12px 16px; border-bottom: 1px solid #f5f0e8;
-          cursor: pointer; font-size: 0.88rem; color: #2d4a2d;
-          transition: background 0.2s;
+          cursor: pointer; font-size: 0.88rem; color: #2d4a2d; transition: background 0.2s;
         }
         .dropdown-item:hover { background: #f5f0e8; }
         .dropdown-item:last-child { border-bottom: none; border-radius: 0 0 12px 12px; }
@@ -364,10 +392,7 @@ export default function Home() {
           padding-top: 16px; border-top: 1px solid #e8e0d4;
         }
         .form-group { margin-bottom: 14px; }
-        .label {
-          display: block; font-size: 0.88rem; color: #555;
-          font-weight: 500; margin-bottom: 6px;
-        }
+        .label { display: block; font-size: 0.88rem; color: #555; font-weight: 500; margin-bottom: 6px; }
         .input, .select {
           width: 100%; padding: 12px 14px;
           border: 1.5px solid #e0d8cc; border-radius: 11px;
@@ -385,13 +410,8 @@ export default function Home() {
           min-height: 80px; resize: vertical;
         }
         .textarea:focus { border-color: #7ab87a; background: #fff; }
-        
         .radio-group { display: flex; gap: 12px; flex-wrap: wrap; }
-        .radio-label {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 0.88rem; color: #555; cursor: pointer;
-        }
-        
+        .radio-label { display: flex; align-items: center; gap: 6px; font-size: 0.88rem; color: #555; cursor: pointer; }
         .toggle-details {
           background: #f5f0e8; border: 1.5px dashed #e0d8cc;
           padding: 12px; border-radius: 10px; text-align: center;
@@ -399,95 +419,61 @@ export default function Home() {
           transition: all 0.2s; margin-bottom: 14px;
         }
         .toggle-details:hover { background: #e8e0d4; border-color: #7ab87a; }
-        
         .btn {
           width: 100%; padding: 13px; border-radius: 12px;
           border: none; background: #2d4a2d; color: #f5f0e8;
           font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
-          font-weight: 500; cursor: pointer;
-          transition: background 0.2s, transform 0.1s;
+          font-weight: 500; cursor: pointer; transition: background 0.2s, transform 0.1s;
         }
         .btn:hover { background: #3d6b3d; }
         .btn:active { transform: scale(0.98); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .btn-outline {
-          background: #fff; color: #2d4a2d; border: 1.5px solid #2d4a2d;
-        }
+        .btn-outline { background: #fff; color: #2d4a2d; border: 1.5px solid #2d4a2d; }
         .btn-outline:hover { background: #2d4a2d; color: #f5f0e8; }
-        
-        .btn-danger {
-          background: #dc3545; color: #fff; border: none; width: auto;
-        }
+        .btn-danger { background: #dc3545; color: #fff; border: none; width: auto; }
         .btn-danger:hover { background: #c82333; }
         .btn-small { padding: 4px 8px; font-size: 0.75rem; }
-
-        .alert {
-          padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
-        }
+        .alert { padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
         .alert-warning { background: #fff0e6; color: #c67700; }
         .alert-error { background: #ffe0e0; color: #c00; }
-
+        .alert-info { background: #f0f7f0; color: #2d4a2d; border: 1px solid #c8e6c8; }
         .link-btn {
           background: none; border: none; color: #7ab87a;
           font-size: 0.85rem; cursor: pointer; text-decoration: underline;
           padding: 0; margin: 12px 0; display: block; text-align: center;
         }
-
+        .address-toggle {
+          display: flex; gap: 8px; margin-bottom: 16px;
+        }
+        .address-tab {
+          flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid #e0d8cc;
+          background: #faf8f4; color: #555; font-size: 0.85rem; font-weight: 500;
+          cursor: pointer; text-align: center; transition: all 0.2s;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .address-tab.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
         .req-list { display: flex; flex-direction: column; gap: 12px; }
         .req-item {
           background: #faf8f4; padding: 16px; border-radius: 12px;
-          border: 1px solid #e8e0d4; transition: all 0.2s;
-          cursor: pointer; position: relative;
+          border: 1px solid #e8e0d4; transition: all 0.2s; cursor: pointer; position: relative;
         }
-        .req-item:hover {
-          background: #fff; box-shadow: 0 4px 12px rgba(45,74,45,0.08);
-          transform: translateY(-2px);
-        }
+        .req-item:hover { background: #fff; box-shadow: 0 4px 12px rgba(45,74,45,0.08); transform: translateY(-2px); }
         .req-item.has-messages { border-left: 3px solid #7ab87a; }
-        .req-top {
-          display: flex; justify-content: space-between;
-          align-items: flex-start; margin-bottom: 6px; gap: 8px;
-        }
+        .req-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 8px; }
         .req-title { font-weight: 600; font-size: 0.95rem; color: #2d4a2d; flex: 1; }
-        .req-status {
-          font-size: 0.75rem; padding: 3px 8px; border-radius: 100px;
-          white-space: nowrap;
-        }
+        .req-status { font-size: 0.75rem; padding: 3px 8px; border-radius: 100px; white-space: nowrap; }
         .req-route { font-size: 0.85rem; color: #888; margin-bottom: 6px; }
         .req-meta { font-size: 0.8rem; color: #999; margin-bottom: 8px; }
-        
-        .req-footer {
-          display: flex; justify-content: space-between; align-items: center;
-          padding-top: 8px; border-top: 1px solid #e8e0d4;
-        }
-        .message-indicator {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 0.8rem; color: #7ab87a; font-weight: 500;
-        }
-        .message-badge {
-          background: #7ab87a; color: #fff;
-          width: 20px; height: 20px; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 0.7rem; font-weight: 600;
-        }
+        .req-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid #e8e0d4; }
+        .message-indicator { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #7ab87a; font-weight: 500; }
+        .message-badge { background: #7ab87a; color: #fff; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; }
         .card-actions { display: flex; gap: 8px; align-items: center; }
-        .chat-btn {
-          background: #2d4a2d; color: #f5f0e8;
-          padding: 6px 12px; border-radius: 8px;
-          font-size: 0.8rem; border: none;
-          cursor: pointer; transition: all 0.2s;
-        }
+        .chat-btn { background: #2d4a2d; color: #f5f0e8; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; border: none; cursor: pointer; transition: all 0.2s; }
         .chat-btn:hover { background: #3d6b3d; }
-        
         .empty { text-align: center; padding: 40px 20px; color: #bbb; font-size: 0.9rem; }
         .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
         .post-btn-wrapper { margin-bottom: 24px; }
-        .tip-box {
-          background: #f0f7f0; border: 1.5px solid #7ab87a;
-          border-radius: 12px; padding: 14px; margin-bottom: 20px;
-          font-size: 0.88rem; color: #2d4a2d; line-height: 1.5;
-        }
+        .tip-box { background: #f0f7f0; border: 1.5px solid #7ab87a; border-radius: 12px; padding: 14px; margin-bottom: 20px; font-size: 0.88rem; color: #2d4a2d; line-height: 1.5; }
         .tip-icon { font-size: 1.2rem; margin-right: 6px; }
       `}</style>
 
@@ -501,39 +487,30 @@ export default function Home() {
           <div className="user-info">
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
-          <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
-            Menu ▼
-          </button>
+          <div className="user-header-right">
+            {dbUserId && <NotificationBell userId={dbUserId} role={userRole} />}
+            <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
+              Menu ▼
+            </button>
+          </div>
           {showUserMenu && (
             <div className="user-dropdown">
               {isAdmin && (
-                <div className="dropdown-item" onClick={() => router.push('/admin')}>
-                  ⚙️ Admin Dashboard
-                </div>
+                <div className="dropdown-item" onClick={() => router.push('/admin')}>⚙️ Admin Dashboard</div>
               )}
               {isTerritoryOwner && (
-                <div className="dropdown-item" onClick={() => router.push('/owner')}>
-                  📊 Owner Dashboard
-                </div>
+                <div className="dropdown-item" onClick={() => router.push('/owner')}>📊 Owner Dashboard</div>
               )}
-              <div className="dropdown-item" onClick={() => router.push('/profile')}>
-                👤 Profile & Settings
-              </div>
-              <div className="dropdown-item" onClick={() => router.push('/directory')}>
-                🏪 Merchants
-              </div>
-              <div className="dropdown-item logout" onClick={handleLogout}>
-                🚪 Log Out
-              </div>
+              <div className="dropdown-item" onClick={() => router.push('/profile')}>👤 Profile & Settings</div>
+              <div className="dropdown-item" onClick={() => router.push('/directory')}>🏪 Merchants</div>
+              <div className="dropdown-item logout" onClick={handleLogout}>🚪 Log Out</div>
             </div>
           )}
         </div>
 
         {!showForm ? (
           <div className="post-btn-wrapper">
-            <button className="btn" onClick={() => setShowForm(true)}>
-              + Post a Request
-            </button>
+            <button className="btn" onClick={() => setShowForm(true)}>+ Post a Request</button>
           </div>
         ) : (
           <div className="card">
@@ -545,54 +522,92 @@ export default function Home() {
                   value={title} onChange={e => setTitle(e.target.value)} required />
               </div>
 
-              <div className="section-label">Delivery Address (Required First)</div>
-              <div className="form-group">
-                <label className="label">Street Address *</label>
-                <input className="input" placeholder="456 Oak Ave"
-                  value={deliveryStreet}
-                  onChange={e => setDeliveryStreet(e.target.value)} required />
-              </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
-                <div className="form-group">
-                  <label className="label">City *</label>
-                  <input className="input" placeholder="Oconto"
-                    value={deliveryCity}
-                    onChange={e => setDeliveryCity(e.target.value)} required />
+              <div className="section-label">Delivery Address</div>
+
+              {/* Address toggle — only show if user has a profile address */}
+              {hasProfileAddress && (
+                <div className="address-toggle">
+                  <button
+                    type="button"
+                    className={`address-tab ${usingProfileAddress ? 'active' : ''}`}
+                    onClick={useProfileAddress}
+                  >
+                    🏠 My Home Address
+                  </button>
+                  <button
+                    type="button"
+                    className={`address-tab ${!usingProfileAddress ? 'active' : ''}`}
+                    onClick={() => setUsingProfileAddress(false)}
+                  >
+                    📍 Different Address
+                  </button>
                 </div>
-                <div className="form-group">
-                  <label className="label">State *</label>
-                  <select className="select" value={deliveryState}
-                    onChange={e => setDeliveryState(e.target.value)} required>
-                    <option value="">Select...</option>
-                    {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+              )}
+
+              {/* Show profile address summary when using it */}
+              {hasProfileAddress && usingProfileAddress ? (
+                <div className="alert alert-info" style={{marginBottom: '14px'}}>
+                  <strong>Delivering to:</strong> {profileStreet}, {profileCity}, {profileState} {profileZip}
+                  {profileDeliveryInstructions && (
+                    <div style={{marginTop: '4px', fontSize: '0.82rem', color: '#555'}}>
+                      📝 {profileDeliveryInstructions}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="label">ZIP Code *</label>
-                <input className="input" placeholder="54153" maxLength={5}
-                  pattern="[0-9]{5}" value={deliveryZip}
-                  onChange={e => setDeliveryZip(e.target.value.replace(/\D/g, '').slice(0,5))}
-                  required />
-              </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="label">Street Address *</label>
+                    <input className="input" placeholder="456 Oak Ave"
+                      value={deliveryStreet} onChange={e => setDeliveryStreet(e.target.value)} required />
+                  </div>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
+                    <div className="form-group">
+                      <label className="label">City *</label>
+                      <input className="input" placeholder="Oconto"
+                        value={deliveryCity} onChange={e => setDeliveryCity(e.target.value)} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="label">State *</label>
+                      <select className="select" value={deliveryState}
+                        onChange={e => setDeliveryState(e.target.value)} required>
+                        <option value="">Select...</option>
+                        {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="label">ZIP Code *</label>
+                    <input className="input" placeholder="54153" maxLength={5}
+                      pattern="[0-9]{5}" value={deliveryZip}
+                      onChange={e => setDeliveryZip(e.target.value.replace(/\D/g, '').slice(0,5))} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Delivery Instructions (optional)</label>
+                    <input className="input" placeholder="Gate code, back door, etc."
+                      value={deliveryInstructions} onChange={e => setDeliveryInstructions(e.target.value)} />
+                  </div>
+                </>
+              )}
+
+              {/* If no profile address, show a nudge */}
+              {!hasProfileAddress && (
+                <div className="alert alert-warning" style={{marginBottom: '14px'}}>
+                  💡 Save your address in <button type="button" className="link-btn" style={{display:'inline', margin: 0}} onClick={() => router.push('/profile')}>Profile Settings</button> to auto-fill next time.
+                </div>
+              )}
 
               <div className="section-label">Pickup Location</div>
 
-              {deliveryZip.length !== 5 && (
+              {deliveryZip.length !== 5 && !usingProfileAddress && (
                 <div className="alert alert-warning">
                   Enter your delivery ZIP code first to see available merchants
                 </div>
               )}
 
-              {deliveryZip.length === 5 && !territory && (
+              {(deliveryZip.length === 5 || usingProfileAddress) && !territory && (
                 <div className="alert alert-error">
-                  No service available in ZIP {deliveryZip} at this time
-                </div>
-              )}
-
-              {deliveryZip.length === 5 && territory && availableMerchants.length === 0 && (
-                <div className="alert alert-warning">
-                  No merchants available for this territory yet. Use custom address below.
+                  No service available in ZIP {usingProfileAddress ? profileZip : deliveryZip} at this time
                 </div>
               )}
 
@@ -604,14 +619,11 @@ export default function Home() {
                       onChange={e => setSelectedMerchant(e.target.value ? parseInt(e.target.value) : null)}>
                       <option value="">Choose a merchant...</option>
                       {availableMerchants.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} - {m.address}
-                        </option>
+                        <option key={m.id} value={m.id}>{m.name} - {m.address}</option>
                       ))}
                     </select>
                   </div>
-                  <button type="button" className="link-btn"
-                    onClick={() => setUseCustomPickup(true)}>
+                  <button type="button" className="link-btn" onClick={() => setUseCustomPickup(true)}>
                     Or enter custom pickup address
                   </button>
                 </>
@@ -621,33 +633,24 @@ export default function Home() {
                 <>
                   {availableMerchants.length > 0 && (
                     <button type="button" className="link-btn"
-                      onClick={() => {
-                        setUseCustomPickup(false);
-                        setPickupStreet("");
-                        setPickupCity("");
-                        setPickupState("");
-                        setPickupZip("");
-                      }}>
+                      onClick={() => { setUseCustomPickup(false); setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip(""); }}>
                       ← Back to merchant list
                     </button>
                   )}
                   <div className="form-group">
                     <label className="label">Street Address</label>
                     <input className="input" placeholder="123 Main St"
-                      value={pickupStreet}
-                      onChange={e => setPickupStreet(e.target.value)} />
+                      value={pickupStreet} onChange={e => setPickupStreet(e.target.value)} />
                   </div>
                   <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
                     <div className="form-group">
                       <label className="label">City</label>
                       <input className="input" placeholder="Madison"
-                        value={pickupCity}
-                        onChange={e => setPickupCity(e.target.value)} />
+                        value={pickupCity} onChange={e => setPickupCity(e.target.value)} />
                     </div>
                     <div className="form-group">
                       <label className="label">State</label>
-                      <select className="select" value={pickupState}
-                        onChange={e => setPickupState(e.target.value)}>
+                      <select className="select" value={pickupState} onChange={e => setPickupState(e.target.value)}>
                         <option value="">Select...</option>
                         {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -656,8 +659,7 @@ export default function Home() {
                   <div className="form-group">
                     <label className="label">ZIP Code</label>
                     <input className="input" placeholder="54153" maxLength={5}
-                      value={pickupZip}
-                      onChange={e => setPickupZip(e.target.value.replace(/\D/g, '').slice(0,5))} />
+                      value={pickupZip} onChange={e => setPickupZip(e.target.value.replace(/\D/g, '').slice(0,5))} />
                   </div>
                 </>
               )}
@@ -673,78 +675,61 @@ export default function Home() {
                     <div className="radio-group">
                       <label className="radio-label">
                         <input type="radio" name="pickupFlex" value="asap"
-                          checked={pickupFlexibility === "asap"}
-                          onChange={e => setPickupFlexibility(e.target.value)} />
+                          checked={pickupFlexibility === "asap"} onChange={e => setPickupFlexibility(e.target.value)} />
                         ASAP
                       </label>
                       <label className="radio-label">
                         <input type="radio" name="pickupFlex" value="flexible"
-                          checked={pickupFlexibility === "flexible"}
-                          onChange={e => setPickupFlexibility(e.target.value)} />
+                          checked={pickupFlexibility === "flexible"} onChange={e => setPickupFlexibility(e.target.value)} />
                         Flexible
                       </label>
                       <label className="radio-label">
                         <input type="radio" name="pickupFlex" value="scheduled"
-                          checked={pickupFlexibility === "scheduled"}
-                          onChange={e => setPickupFlexibility(e.target.value)} />
+                          checked={pickupFlexibility === "scheduled"} onChange={e => setPickupFlexibility(e.target.value)} />
                         Scheduled
                       </label>
                     </div>
                   </div>
-
                   {pickupFlexibility === "scheduled" && (
                     <div className="form-group">
                       <label className="label">Pickup time</label>
-                      <input className="input" type="datetime-local"
-                        value={pickupTime}
-                        onChange={e => setPickupTime(e.target.value)} />
+                      <input className="input" type="datetime-local" value={pickupTime} onChange={e => setPickupTime(e.target.value)} />
                     </div>
                   )}
-
                   <div className="form-group">
                     <label className="label">Delivery timing</label>
                     <div className="radio-group">
                       <label className="radio-label">
                         <input type="radio" name="deliveryFlex" value="asap"
-                          checked={deliveryFlexibility === "asap"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)} />
+                          checked={deliveryFlexibility === "asap"} onChange={e => setDeliveryFlexibility(e.target.value)} />
                         ASAP
                       </label>
                       <label className="radio-label">
                         <input type="radio" name="deliveryFlex" value="flexible"
-                          checked={deliveryFlexibility === "flexible"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)} />
+                          checked={deliveryFlexibility === "flexible"} onChange={e => setDeliveryFlexibility(e.target.value)} />
                         Flexible
                       </label>
                       <label className="radio-label">
                         <input type="radio" name="deliveryFlex" value="scheduled"
-                          checked={deliveryFlexibility === "scheduled"}
-                          onChange={e => setDeliveryFlexibility(e.target.value)} />
+                          checked={deliveryFlexibility === "scheduled"} onChange={e => setDeliveryFlexibility(e.target.value)} />
                         By specific time
                       </label>
                     </div>
                   </div>
-
                   {deliveryFlexibility === "scheduled" && (
                     <div className="form-group">
                       <label className="label">Deliver by</label>
-                      <input className="input" type="datetime-local"
-                        value={deliveryTime}
-                        onChange={e => setDeliveryTime(e.target.value)} />
+                      <input className="input" type="datetime-local" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} />
                     </div>
                   )}
-
                   <div className="form-group">
                     <label className="label">How much will you pay?</label>
                     <input className="input" type="number" step="0.01" placeholder="15.00"
-                      value={offeredAmount}
-                      onChange={e => setOfferedAmount(e.target.value)} />
+                      value={offeredAmount} onChange={e => setOfferedAmount(e.target.value)} />
                   </div>
-
                   <div className="form-group">
                     <label className="label">Payment method</label>
-                    <select className="select" value={paymentMethod}
-                      onChange={e => setPaymentMethod(e.target.value)}>
+                    <select className="select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
                       <option>Cash</option>
                       <option>Venmo</option>
                       <option>Zelle</option>
@@ -754,13 +739,11 @@ export default function Home() {
                       <option>Other</option>
                     </select>
                   </div>
-
                   <div className="form-group">
                     <label className="label">Payment notes (optional)</label>
                     <textarea className="textarea"
                       placeholder="e.g. Venmo @username, or any special instructions"
-                      value={paymentNotes}
-                      onChange={e => setPaymentNotes(e.target.value)} />
+                      value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} />
                   </div>
                 </>
               )}
@@ -769,7 +752,7 @@ export default function Home() {
                 <button type="submit" className="btn" disabled={submitting} style={{flex: 1}}>
                   {submitting ? "Posting..." : "Post Request"}
                 </button>
-                <button type="button" className="btn btn-outline" 
+                <button type="button" className="btn btn-outline"
                   onClick={() => setShowForm(false)} style={{flex: 1}}>
                   Cancel
                 </button>
@@ -781,82 +764,30 @@ export default function Home() {
         {isCustomer && myRequests.length > 0 && (
           <div className="tip-box">
             <span className="tip-icon">💬</span>
-            <strong>Click any request to chat with your territory owner!</strong> They'll get notified and can answer questions or send updates.
+            <strong>Click any request to chat with your runner!</strong> They'll get notified and can answer questions or send updates.
           </div>
         )}
 
         <div className="card">
-          <div className="card-title">
-            {isCustomer ? "My Requests" : "All Requests"}
-          </div>
+          <div className="card-title">{isCustomer ? "My Requests" : "All Requests"}</div>
           
           {isCustomer && (
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              marginBottom: '16px',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={() => setRequestFilter("all")}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1.5px solid #e0d8cc',
-                  background: requestFilter === "all" ? '#2d4a2d' : '#faf8f4',
-                  color: requestFilter === "all" ? '#f5f0e8' : '#555',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                All ({displayRequests.length})
-              </button>
-              <button
-                onClick={() => setRequestFilter("open")}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1.5px solid #e0d8cc',
-                  background: requestFilter === "open" ? '#2d4a2d' : '#faf8f4',
-                  color: requestFilter === "open" ? '#f5f0e8' : '#555',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                Open ({displayRequests.filter(r => r.status === 'open').length})
-              </button>
-              <button
-                onClick={() => setRequestFilter("accepted")}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1.5px solid #e0d8cc',
-                  background: requestFilter === "accepted" ? '#2d4a2d' : '#faf8f4',
-                  color: requestFilter === "accepted" ? '#f5f0e8' : '#555',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                In Progress ({displayRequests.filter(r => r.status === 'accepted').length})
-              </button>
-              <button
-                onClick={() => setRequestFilter("completed")}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1.5px solid #e0d8cc',
-                  background: requestFilter === "completed" ? '#2d4a2d' : '#faf8f4',
-                  color: requestFilter === "completed" ? '#f5f0e8' : '#555',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                Completed ({displayRequests.filter(r => r.status === 'completed').length})
-              </button>
+            <div style={{display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'}}>
+              {[
+                { key: "all", label: `All (${displayRequests.length})` },
+                { key: "open", label: `Open (${displayRequests.filter(r => r.status === 'open').length})` },
+                { key: "accepted", label: `In Progress (${displayRequests.filter(r => r.status === 'accepted').length})` },
+                { key: "completed", label: `Completed (${displayRequests.filter(r => r.status === 'completed').length})` },
+              ].map(f => (
+                <button key={f.key} onClick={() => setRequestFilter(f.key)} style={{
+                  padding: '6px 14px', borderRadius: '20px', border: '1.5px solid #e0d8cc',
+                  background: requestFilter === f.key ? '#2d4a2d' : '#faf8f4',
+                  color: requestFilter === f.key ? '#f5f0e8' : '#555',
+                  fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer'
+                }}>
+                  {f.label}
+                </button>
+              ))}
             </div>
           )}
           
@@ -870,27 +801,22 @@ export default function Home() {
               {filteredRequests.slice(0, 20).map(r => {
                 const statusInfo = getStatusInfo(r.status);
                 const hasMessages = (r.message_count || 0) > 0;
-                
                 return (
                   <div key={r.id}
                     className={`req-item ${hasMessages ? 'has-messages' : ''}`}
                     onClick={() => router.push(`/request/${r.id}`)}>
                     <div className="req-top">
                       <div className="req-title">{r.title}</div>
-                      <div className="req-status" 
-                        style={{ background: statusInfo.bg, color: statusInfo.color }}>
+                      <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
                         {statusInfo.label}
                       </div>
                     </div>
-                    <div className="req-route">
-                      📍 {r.pickup} → 🏠 {r.dropoff}
-                    </div>
+                    <div className="req-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
                     <div className="req-meta">
                       {r.offered_amount && `$${r.offered_amount} • `}
                       {r.pickup_flexibility === 'asap' && 'ASAP • '}
                       {new Date(r.created_at).toLocaleDateString()}
                     </div>
-                    
                     <div className="req-footer">
                       <div className="message-indicator">
                         {hasMessages ? (
@@ -904,28 +830,19 @@ export default function Home() {
                       </div>
                       <div className="card-actions">
                         <button className="chat-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/request/${r.id}`);
-                          }}>
+                          onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
                           💬 Chat
                         </button>
                         {isCustomer && r.status === 'completed' && (
                           <button className="chat-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reorderRequest(r);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
                             style={{background: '#7ab87a', color: '#fff'}}>
                             🔄 Order Again
                           </button>
                         )}
                         {isAdmin && (
                           <button className="btn btn-danger btn-small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteRequest(r.id, r.title);
-                            }}>
+                            onClick={(e) => { e.stopPropagation(); deleteRequest(r.id, r.title); }}>
                             Delete
                           </button>
                         )}
