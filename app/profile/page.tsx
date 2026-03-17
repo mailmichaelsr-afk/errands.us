@@ -248,7 +248,7 @@ export default function ProfilePage() {
             <label>Email (cannot be changed)</label>
             <input
               className="input"
-              value={user?.email || ""}
+              value={(user as any)?.email || ""}
               disabled
               style={{background: '#f0f0f0', cursor: 'not-allowed'}}
             />
