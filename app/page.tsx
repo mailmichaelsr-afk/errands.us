@@ -1,4 +1,4 @@
-// app/page.tsx - With profile address auto-fill + notification bell
+// app/page.tsx - With profile address auto-fill + notification bell + territory lookup
 
 "use client";
 import { useEffect, useState } from "react";
@@ -108,7 +108,6 @@ export default function Home() {
           setProfileState(state);
           setProfileZip(zip);
           setProfileDeliveryInstructions(instructions);
-          // Pre-fill form with profile address
           setDeliveryStreet(street);
           setDeliveryCity(city);
           setDeliveryState(state);
@@ -121,6 +120,27 @@ export default function Home() {
     };
     fetchProfile();
   }, [dbUserId]);
+
+  // Load territory when ZIP is known
+  useEffect(() => {
+    const zip = usingProfileAddress ? profileZip : deliveryZip;
+    if (!zip || zip.length !== 5) {
+      setTerritory(null);
+      return;
+    }
+    const fetchTerritory = async () => {
+      try {
+        const res = await fetch(`/.netlify/functions/territories-get?zip=${zip}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTerritory(data.length > 0 ? data[0] : null);
+        }
+      } catch (e) {
+        setTerritory(null);
+      }
+    };
+    fetchTerritory();
+  }, [deliveryZip, profileZip, usingProfileAddress]);
 
   // Load merchants
   useEffect(() => {
@@ -204,7 +224,13 @@ export default function Home() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !deliveryZip) {
+    const activeZip = usingProfileAddress ? profileZip : deliveryZip;
+    const activeStreet = usingProfileAddress ? profileStreet : deliveryStreet;
+    const activeCity = usingProfileAddress ? profileCity : deliveryCity;
+    const activeState = usingProfileAddress ? profileState : deliveryState;
+    const activeInstructions = usingProfileAddress ? profileDeliveryInstructions : deliveryInstructions;
+
+    if (!title || !activeZip) {
       alert("Title and delivery ZIP code are required");
       return;
     }
@@ -221,11 +247,11 @@ export default function Home() {
           pickup_city: pickupCity,
           pickup_state: pickupState,
           pickup_zip: pickupZip,
-          delivery_street: deliveryStreet,
-          delivery_city: deliveryCity,
-          delivery_state: deliveryState,
-          delivery_zip: deliveryZip,
-          delivery_instructions: deliveryInstructions,
+          delivery_street: activeStreet,
+          delivery_city: activeCity,
+          delivery_state: activeState,
+          delivery_zip: activeZip,
+          delivery_instructions: activeInstructions,
           pickup_time: pickupTime || null,
           pickup_flexibility: pickupFlexibility,
           delivery_time: deliveryTime || null,
@@ -238,7 +264,6 @@ export default function Home() {
 
       if (res.ok) {
         const newRequest = await res.json();
-        // Reset form but keep profile address ready for next time
         setTitle("");
         setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip("");
         setDeliveryStreet(profileStreet); setDeliveryCity(profileCity);
@@ -329,6 +354,7 @@ export default function Home() {
 
   const userRole = isAdmin ? 'admin' : isTerritoryOwner ? 'owner' : 'customer';
   const hasProfileAddress = !!(profileStreet && profileZip);
+  const activeZip = usingProfileAddress ? profileZip : deliveryZip;
 
   return (
     <>
@@ -348,7 +374,6 @@ export default function Home() {
         .logo { font-family: 'Fraunces', serif; font-size: 2.2rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
         .tagline { font-size: 0.95rem; color: #888; margin-top: 6px; }
-
         .user-header {
           display: flex; justify-content: space-between; align-items: center;
           padding: 12px 16px; background: #fff; border-radius: 12px;
@@ -376,16 +401,12 @@ export default function Home() {
         .dropdown-item:last-child { border-bottom: none; border-radius: 0 0 12px 12px; }
         .dropdown-item:first-child { border-radius: 12px 12px 0 0; }
         .dropdown-item.logout { color: #dc3545; }
-
         .card {
           background: #fff; border-radius: 16px; padding: 24px;
           margin-bottom: 24px; box-shadow: 0 2px 12px rgba(45,74,45,0.07);
           border: 1px solid rgba(45,74,45,0.05);
         }
-        .card-title {
-          font-family: 'Fraunces', serif; font-size: 1.2rem;
-          color: #2d4a2d; margin-bottom: 16px; font-weight: 600;
-        }
+        .card-title { font-family: 'Fraunces', serif; font-size: 1.2rem; color: #2d4a2d; margin-bottom: 16px; font-weight: 600; }
         .section-label {
           font-family: 'Fraunces', serif; font-size: 1rem;
           font-weight: 600; color: #2d4a2d; margin: 20px 0 12px;
@@ -403,11 +424,9 @@ export default function Home() {
         .input:focus, .select:focus { border-color: #7ab87a; background: #fff; }
         .input::placeholder { color: #bbb; }
         .textarea {
-          width: 100%; padding: 12px 14px;
-          border: 1.5px solid #e0d8cc; border-radius: 11px;
+          width: 100%; padding: 12px 14px; border: 1.5px solid #e0d8cc; border-radius: 11px;
           font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
-          background: #faf8f4; color: #1a1a1a; outline: none;
-          min-height: 80px; resize: vertical;
+          background: #faf8f4; color: #1a1a1a; outline: none; min-height: 80px; resize: vertical;
         }
         .textarea:focus { border-color: #7ab87a; background: #fff; }
         .radio-group { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -420,10 +439,9 @@ export default function Home() {
         }
         .toggle-details:hover { background: #e8e0d4; border-color: #7ab87a; }
         .btn {
-          width: 100%; padding: 13px; border-radius: 12px;
-          border: none; background: #2d4a2d; color: #f5f0e8;
-          font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
-          font-weight: 500; cursor: pointer; transition: background 0.2s, transform 0.1s;
+          width: 100%; padding: 13px; border-radius: 12px; border: none;
+          background: #2d4a2d; color: #f5f0e8; font-family: 'DM Sans', sans-serif;
+          font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: background 0.2s, transform 0.1s;
         }
         .btn:hover { background: #3d6b3d; }
         .btn:active { transform: scale(0.98); }
@@ -442,14 +460,11 @@ export default function Home() {
           font-size: 0.85rem; cursor: pointer; text-decoration: underline;
           padding: 0; margin: 12px 0; display: block; text-align: center;
         }
-        .address-toggle {
-          display: flex; gap: 8px; margin-bottom: 16px;
-        }
+        .address-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
         .address-tab {
           flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid #e0d8cc;
           background: #faf8f4; color: #555; font-size: 0.85rem; font-weight: 500;
-          cursor: pointer; text-align: center; transition: all 0.2s;
-          font-family: 'DM Sans', sans-serif;
+          cursor: pointer; text-align: center; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
         }
         .address-tab.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
         .req-list { display: flex; flex-direction: column; gap: 12px; }
@@ -495,12 +510,8 @@ export default function Home() {
           </div>
           {showUserMenu && (
             <div className="user-dropdown">
-              {isAdmin && (
-                <div className="dropdown-item" onClick={() => router.push('/admin')}>⚙️ Admin Dashboard</div>
-              )}
-              {isTerritoryOwner && (
-                <div className="dropdown-item" onClick={() => router.push('/owner')}>📊 Owner Dashboard</div>
-              )}
+              {isAdmin && <div className="dropdown-item" onClick={() => router.push('/admin')}>⚙️ Admin Dashboard</div>}
+              {isTerritoryOwner && <div className="dropdown-item" onClick={() => router.push('/owner')}>📊 Owner Dashboard</div>}
               <div className="dropdown-item" onClick={() => router.push('/profile')}>👤 Profile & Settings</div>
               <div className="dropdown-item" onClick={() => router.push('/directory')}>🏪 Merchants</div>
               <div className="dropdown-item logout" onClick={handleLogout}>🚪 Log Out</div>
@@ -524,27 +535,17 @@ export default function Home() {
 
               <div className="section-label">Delivery Address</div>
 
-              {/* Address toggle — only show if user has a profile address */}
               {hasProfileAddress && (
                 <div className="address-toggle">
-                  <button
-                    type="button"
-                    className={`address-tab ${usingProfileAddress ? 'active' : ''}`}
-                    onClick={useProfileAddress}
-                  >
+                  <button type="button" className={`address-tab ${usingProfileAddress ? 'active' : ''}`} onClick={useProfileAddress}>
                     🏠 My Home Address
                   </button>
-                  <button
-                    type="button"
-                    className={`address-tab ${!usingProfileAddress ? 'active' : ''}`}
-                    onClick={() => setUsingProfileAddress(false)}
-                  >
+                  <button type="button" className={`address-tab ${!usingProfileAddress ? 'active' : ''}`} onClick={() => setUsingProfileAddress(false)}>
                     📍 Different Address
                   </button>
                 </div>
               )}
 
-              {/* Show profile address summary when using it */}
               {hasProfileAddress && usingProfileAddress ? (
                 <div className="alert alert-info" style={{marginBottom: '14px'}}>
                   <strong>Delivering to:</strong> {profileStreet}, {profileCity}, {profileState} {profileZip}
@@ -569,8 +570,7 @@ export default function Home() {
                     </div>
                     <div className="form-group">
                       <label className="label">State *</label>
-                      <select className="select" value={deliveryState}
-                        onChange={e => setDeliveryState(e.target.value)} required>
+                      <select className="select" value={deliveryState} onChange={e => setDeliveryState(e.target.value)} required>
                         <option value="">Select...</option>
                         {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -578,9 +578,8 @@ export default function Home() {
                   </div>
                   <div className="form-group">
                     <label className="label">ZIP Code *</label>
-                    <input className="input" placeholder="54153" maxLength={5}
-                      pattern="[0-9]{5}" value={deliveryZip}
-                      onChange={e => setDeliveryZip(e.target.value.replace(/\D/g, '').slice(0,5))} required />
+                    <input className="input" placeholder="54153" maxLength={5} pattern="[0-9]{5}"
+                      value={deliveryZip} onChange={e => setDeliveryZip(e.target.value.replace(/\D/g, '').slice(0,5))} required />
                   </div>
                   <div className="form-group">
                     <label className="label">Delivery Instructions (optional)</label>
@@ -590,7 +589,6 @@ export default function Home() {
                 </>
               )}
 
-              {/* If no profile address, show a nudge */}
               {!hasProfileAddress && (
                 <div className="alert alert-warning" style={{marginBottom: '14px'}}>
                   💡 Save your address in <button type="button" className="link-btn" style={{display:'inline', margin: 0}} onClick={() => router.push('/profile')}>Profile Settings</button> to auto-fill next time.
@@ -599,15 +597,15 @@ export default function Home() {
 
               <div className="section-label">Pickup Location</div>
 
-              {deliveryZip.length !== 5 && !usingProfileAddress && (
-                <div className="alert alert-warning">
-                  Enter your delivery ZIP code first to see available merchants
+              {activeZip.length === 5 && !territory && (
+                <div className="alert alert-error">
+                  No service available in ZIP {activeZip} at this time
                 </div>
               )}
 
-              {(deliveryZip.length === 5 || usingProfileAddress) && !territory && (
-                <div className="alert alert-error">
-                  No service available in ZIP {usingProfileAddress ? profileZip : deliveryZip} at this time
+              {activeZip.length < 5 && (
+                <div className="alert alert-warning">
+                  Enter your delivery ZIP code first to see available merchants
                 </div>
               )}
 
@@ -639,14 +637,12 @@ export default function Home() {
                   )}
                   <div className="form-group">
                     <label className="label">Street Address</label>
-                    <input className="input" placeholder="123 Main St"
-                      value={pickupStreet} onChange={e => setPickupStreet(e.target.value)} />
+                    <input className="input" placeholder="123 Main St" value={pickupStreet} onChange={e => setPickupStreet(e.target.value)} />
                   </div>
                   <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'}}>
                     <div className="form-group">
                       <label className="label">City</label>
-                      <input className="input" placeholder="Madison"
-                        value={pickupCity} onChange={e => setPickupCity(e.target.value)} />
+                      <input className="input" placeholder="Madison" value={pickupCity} onChange={e => setPickupCity(e.target.value)} />
                     </div>
                     <div className="form-group">
                       <label className="label">State</label>
@@ -673,21 +669,13 @@ export default function Home() {
                   <div className="form-group">
                     <label className="label">Pickup timing</label>
                     <div className="radio-group">
-                      <label className="radio-label">
-                        <input type="radio" name="pickupFlex" value="asap"
-                          checked={pickupFlexibility === "asap"} onChange={e => setPickupFlexibility(e.target.value)} />
-                        ASAP
-                      </label>
-                      <label className="radio-label">
-                        <input type="radio" name="pickupFlex" value="flexible"
-                          checked={pickupFlexibility === "flexible"} onChange={e => setPickupFlexibility(e.target.value)} />
-                        Flexible
-                      </label>
-                      <label className="radio-label">
-                        <input type="radio" name="pickupFlex" value="scheduled"
-                          checked={pickupFlexibility === "scheduled"} onChange={e => setPickupFlexibility(e.target.value)} />
-                        Scheduled
-                      </label>
+                      {['asap','flexible','scheduled'].map(v => (
+                        <label key={v} className="radio-label">
+                          <input type="radio" name="pickupFlex" value={v}
+                            checked={pickupFlexibility === v} onChange={e => setPickupFlexibility(e.target.value)} />
+                          {v === 'asap' ? 'ASAP' : v === 'flexible' ? 'Flexible' : 'Scheduled'}
+                        </label>
+                      ))}
                     </div>
                   </div>
                   {pickupFlexibility === "scheduled" && (
@@ -699,21 +687,13 @@ export default function Home() {
                   <div className="form-group">
                     <label className="label">Delivery timing</label>
                     <div className="radio-group">
-                      <label className="radio-label">
-                        <input type="radio" name="deliveryFlex" value="asap"
-                          checked={deliveryFlexibility === "asap"} onChange={e => setDeliveryFlexibility(e.target.value)} />
-                        ASAP
-                      </label>
-                      <label className="radio-label">
-                        <input type="radio" name="deliveryFlex" value="flexible"
-                          checked={deliveryFlexibility === "flexible"} onChange={e => setDeliveryFlexibility(e.target.value)} />
-                        Flexible
-                      </label>
-                      <label className="radio-label">
-                        <input type="radio" name="deliveryFlex" value="scheduled"
-                          checked={deliveryFlexibility === "scheduled"} onChange={e => setDeliveryFlexibility(e.target.value)} />
-                        By specific time
-                      </label>
+                      {[['asap','ASAP'],['flexible','Flexible'],['scheduled','By specific time']].map(([v,l]) => (
+                        <label key={v} className="radio-label">
+                          <input type="radio" name="deliveryFlex" value={v}
+                            checked={deliveryFlexibility === v} onChange={e => setDeliveryFlexibility(e.target.value)} />
+                          {l}
+                        </label>
+                      ))}
                     </div>
                   </div>
                   {deliveryFlexibility === "scheduled" && (
@@ -730,19 +710,13 @@ export default function Home() {
                   <div className="form-group">
                     <label className="label">Payment method</label>
                     <select className="select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                      <option>Cash</option>
-                      <option>Venmo</option>
-                      <option>Zelle</option>
-                      <option>PayPal</option>
-                      <option>CashApp</option>
-                      <option>Apple Pay</option>
-                      <option>Other</option>
+                      <option>Cash</option><option>Venmo</option><option>Zelle</option>
+                      <option>PayPal</option><option>CashApp</option><option>Apple Pay</option><option>Other</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="label">Payment notes (optional)</label>
-                    <textarea className="textarea"
-                      placeholder="e.g. Venmo @username, or any special instructions"
+                    <textarea className="textarea" placeholder="e.g. Venmo @username"
                       value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} />
                   </div>
                 </>
@@ -752,8 +726,7 @@ export default function Home() {
                 <button type="submit" className="btn" disabled={submitting} style={{flex: 1}}>
                   {submitting ? "Posting..." : "Post Request"}
                 </button>
-                <button type="button" className="btn btn-outline"
-                  onClick={() => setShowForm(false)} style={{flex: 1}}>
+                <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)} style={{flex: 1}}>
                   Cancel
                 </button>
               </div>
@@ -770,7 +743,6 @@ export default function Home() {
 
         <div className="card">
           <div className="card-title">{isCustomer ? "My Requests" : "All Requests"}</div>
-          
           {isCustomer && (
             <div style={{display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'}}>
               {[
@@ -790,7 +762,6 @@ export default function Home() {
               ))}
             </div>
           )}
-          
           {filteredRequests.length === 0 ? (
             <div className="empty">
               <div className="empty-icon">📦</div>
@@ -802,8 +773,7 @@ export default function Home() {
                 const statusInfo = getStatusInfo(r.status);
                 const hasMessages = (r.message_count || 0) > 0;
                 return (
-                  <div key={r.id}
-                    className={`req-item ${hasMessages ? 'has-messages' : ''}`}
+                  <div key={r.id} className={`req-item ${hasMessages ? 'has-messages' : ''}`}
                     onClick={() => router.push(`/request/${r.id}`)}>
                     <div className="req-top">
                       <div className="req-title">{r.title}</div>
@@ -820,22 +790,16 @@ export default function Home() {
                     <div className="req-footer">
                       <div className="message-indicator">
                         {hasMessages ? (
-                          <>
-                            <div className="message-badge">{r.message_count}</div>
-                            <span>💬 {r.message_count} message{r.message_count !== 1 ? 's' : ''}</span>
-                          </>
-                        ) : (
-                          <span style={{color: "#999"}}>No messages yet</span>
-                        )}
+                          <><div className="message-badge">{r.message_count}</div>
+                          <span>💬 {r.message_count} message{r.message_count !== 1 ? 's' : ''}</span></>
+                        ) : <span style={{color: "#999"}}>No messages yet</span>}
                       </div>
                       <div className="card-actions">
-                        <button className="chat-btn"
-                          onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
+                        <button className="chat-btn" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
                           💬 Chat
                         </button>
                         {isCustomer && r.status === 'completed' && (
-                          <button className="chat-btn"
-                            onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
+                          <button className="chat-btn" onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
                             style={{background: '#7ab87a', color: '#fff'}}>
                             🔄 Order Again
                           </button>
