@@ -26,6 +26,10 @@ type Request = {
   delivery_state?: string;
   delivery_zip?: string;
   delivery_instructions?: string;
+  merchant_name?: string;
+  merchant_address?: string;
+  merchant_phone?: string;
+  merchant_hours?: string;
   created_at: string;
   completed_at?: string;
   // legacy fields
