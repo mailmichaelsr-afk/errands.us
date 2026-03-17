@@ -1,4 +1,4 @@
-// app/runner/page.tsx - Runner dashboard with notifications
+// app/runner/page.tsx - Complete runner dashboard
 
 "use client";
 import { useEffect, useState } from "react";
@@ -9,29 +9,56 @@ import NotificationBell from "@/components/NotificationBell";
 type Request = {
   id: number;
   title: string;
-  pickup: string;
-  dropoff: string;
   status: string;
   customer_id: number;
   assigned_to?: number;
   customer_name?: string;
+  customer_email?: string;
   offered_amount?: number;
+  payment_method?: string;
   pickup_flexibility?: string;
-  created_at: string;
+  pickup_street?: string;
+  pickup_city?: string;
+  pickup_state?: string;
+  pickup_zip?: string;
+  delivery_street?: string;
+  delivery_city?: string;
+  delivery_state?: string;
   delivery_zip?: string;
+  delivery_instructions?: string;
+  created_at: string;
+  completed_at?: string;
+  // legacy fields
+  pickup?: string;
+  dropoff?: string;
 };
+
+function formatAddress(street?: string, city?: string, state?: string, zip?: string, fallback?: string) {
+  if (street) return `${street}, ${city || ''} ${state || ''} ${zip || ''}`.trim();
+  return fallback || 'Address not provided';
+}
+
+function thisMonthEarnings(jobs: Request[]) {
+  const now = new Date();
+  return jobs.filter(j => {
+    const d = new Date(j.created_at);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).reduce((sum, j) => sum + (j.offered_amount || 0), 0);
+}
 
 export default function RunnerDashboard() {
   const { user, dbUserId, loading } = useAuth();
   const router = useRouter();
-  
+
   const [openRequests, setOpenRequests] = useState<Request[]>([]);
   const [myJobs, setMyJobs] = useState<Request[]>([]);
   const [completedJobs, setCompletedJobs] = useState<Request[]>([]);
   const [merchants, setMerchants] = useState<any[]>([]);
   const [tab, setTab] = useState<"available" | "myjobs" | "history" | "merchants">("available");
   const [loadingData, setLoadingData] = useState(true);
-  
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
   // Merchant form state
   const [userZip, setUserZip] = useState("");
   const [canAddMerchants, setCanAddMerchants] = useState(true);
@@ -40,61 +67,56 @@ export default function RunnerDashboard() {
   const [merchantCategory, setMerchantCategory] = useState("grocery");
   const [merchantAddress, setMerchantAddress] = useState("");
   const [merchantZip, setMerchantZip] = useState("");
-  const [merchantPhone, setMerchantPhone] = useState("");
-  const [merchantHours, setMerchantHours] = useState("");
-  const [merchantWebsite, setMerchantWebsite] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
+    if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
-  const loadData = async () => {
-    setLoadingData(true);
+  const loadData = async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true);
+    else setLoadingData(true);
+
     try {
       const userRes = await fetch(`/.netlify/functions/users-get?id=${dbUserId}`);
       if (userRes.ok) {
         const userData = await userRes.json();
         setUserZip(userData.zip || "");
         setCanAddMerchants(userData.can_add_merchants !== false);
-        
+
         if (userData.zip) {
           const merchRes = await fetch(
             `/.netlify/functions/merchants-get-for-user?user_id=${dbUserId}&zip=${userData.zip}`
           );
-          if (merchRes.ok) {
-            setMerchants(await merchRes.json());
-          }
+          if (merchRes.ok) setMerchants(await merchRes.json());
         }
       }
-      
+
       const res = await fetch("/.netlify/functions/requests-get");
       if (res.ok) {
         const all = await res.json();
-        const open = all.filter((r: Request) => 
+
+        setOpenRequests(all.filter((r: Request) =>
           r.status === 'open' && (!r.assigned_to || r.assigned_to === dbUserId)
-        );
-        setOpenRequests(open);
-        const mine = all.filter((r: Request) => 
+        ));
+        setMyJobs(all.filter((r: Request) =>
           r.assigned_to === dbUserId && r.status === 'accepted'
-        );
-        setMyJobs(mine);
-        const completed = all.filter((r: Request) => 
+        ));
+        setCompletedJobs(all.filter((r: Request) =>
           r.assigned_to === dbUserId && r.status === 'completed'
-        );
-        setCompletedJobs(completed);
+        ));
       }
     } catch (e) {
       console.error("Failed to load:", e);
     }
+
     setLoadingData(false);
+    setRefreshing(false);
   };
 
   useEffect(() => {
     if (dbUserId) {
       loadData();
-      const interval = setInterval(loadData, 10000);
+      const interval = setInterval(() => loadData(), 15000);
       return () => clearInterval(interval);
     }
   }, [dbUserId]);
@@ -107,13 +129,14 @@ export default function RunnerDashboard() {
         body: JSON.stringify({ request_id: requestId, runner_id: dbUserId }),
       });
       if (res.ok) {
+        setTab("myjobs");
         loadData();
-        alert("✅ Request accepted! Customer has been notified.");
+        alert("✅ Job accepted!");
       } else {
-        alert("❌ Request already accepted by another runner");
+        alert("❌ Already accepted by someone else");
       }
     } catch (e) {
-      alert("Failed to accept request");
+      alert("Failed to accept");
     }
   };
 
@@ -127,12 +150,6 @@ export default function RunnerDashboard() {
     loadData();
   };
 
-  const openMerchantForm = () => {
-    setMerchantName(""); setMerchantCategory("grocery"); setMerchantAddress("");
-    setMerchantZip(userZip); setMerchantPhone(""); setMerchantHours(""); setMerchantWebsite("");
-    setShowMerchantForm(true);
-  };
-
   const saveMerchant = async () => {
     if (!merchantName || !merchantCategory || !merchantZip) {
       alert("Name, category, and ZIP are required");
@@ -144,29 +161,19 @@ export default function RunnerDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: dbUserId, name: merchantName, category: merchantCategory,
-          address: merchantAddress, zip: merchantZip, phone: merchantPhone,
-          hours: merchantHours, website: merchantWebsite, user_zip: userZip,
+          address: merchantAddress, zip: merchantZip, user_zip: userZip,
         }),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        alert(`Failed: ${error.error}`);
-        return;
-      }
+      if (!res.ok) { const e = await res.json(); alert(`Failed: ${e.error}`); return; }
       setShowMerchantForm(false);
+      setMerchantName(""); setMerchantCategory("grocery"); setMerchantAddress(""); setMerchantZip(userZip);
       loadData();
-      const isPersonal = merchantZip !== userZip;
-      alert(isPersonal
-        ? `✅ Added to your personal list`
-        : `✅ Added! Everyone in ZIP ${merchantZip} can see it.`
-      );
-    } catch (e: any) {
-      alert(`Error: ${e.message}`);
-    }
+      alert(merchantZip !== userZip ? `✅ Added to your personal list` : `✅ Added! Everyone in ZIP ${merchantZip} can see it.`);
+    } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
-  const hideMerchant = async (merchantId: number, merchantName: string) => {
-    if (!confirm(`Remove "${merchantName}"? (Won't delete for others)`)) return;
+  const hideMerchant = async (merchantId: number, name: string) => {
+    if (!confirm(`Remove "${name}"? (Won't delete for others)`)) return;
     await fetch("/.netlify/functions/merchants-hide", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -176,10 +183,13 @@ export default function RunnerDashboard() {
   };
 
   if (loading || loadingData) {
-    return <div style={{padding: '40px', textAlign: 'center'}}>Loading...</div>;
+    return <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', color: '#888' }}>Loading...</div>;
   }
 
   if (!user) return null;
+
+  const totalEarned = completedJobs.reduce((s, j) => s + (j.offered_amount || 0), 0);
+  const monthEarned = thisMonthEarnings(completedJobs);
 
   return (
     <>
@@ -187,122 +197,124 @@ export default function RunnerDashboard() {
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
-        .page { max-width: 800px; margin: 0 auto; padding: 32px 20px; }
-        
-        .header {
-          display: flex; justify-content: space-between; align-items: flex-start;
-          margin-bottom: 32px;
-        }
-        .header-left {}
+        .page { max-width: 800px; margin: 0 auto; padding: 24px 16px 80px; }
+
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
         .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
-        .subtitle { color: #888; font-size: 0.9rem; margin-top: 4px; }
-        .header-right { display: flex; align-items: center; gap: 12px; }
-        .back-btn {
-          background: #f5f0e8; border: 1.5px solid #e0d8cc;
-          padding: 8px 14px; border-radius: 8px; cursor: pointer;
-          font-size: 0.85rem; color: #2d4a2d; font-weight: 500;
-        }
-        .back-btn:hover { background: #e8e0d4; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-top: 2px; }
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        .back-btn { background: #f5f0e8; border: 1.5px solid #e0d8cc; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; color: #2d4a2d; font-weight: 500; }
+        .refresh-btn { background: #fff; border: 1.5px solid #e0d8cc; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; color: #2d4a2d; }
 
-        .stats {
-          display: grid; grid-template-columns: repeat(3, 1fr);
-          gap: 12px; margin-bottom: 24px;
-        }
-        .stat-card {
-          background: #fff; padding: 16px; border-radius: 12px;
-          box-shadow: 0 2px 10px rgba(45,74,45,0.06);
-        }
-        .stat-label { font-size: 0.75rem; color: #999; margin-bottom: 4px; }
-        .stat-value { font-family: 'Fraunces', serif; font-size: 1.5rem; color: #2d4a2d; font-weight: 700; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(45,74,45,0.06); }
+        .stat-label { font-size: 0.7rem; color: #999; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-family: 'Fraunces', serif; font-size: 1.4rem; color: #2d4a2d; font-weight: 700; }
+        .stat-sub { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
 
-        .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e0d8cc; overflow-x: auto; }
-        .tab {
-          padding: 12px 20px; background: none; border: none;
-          font-size: 0.9rem; font-weight: 500; color: #666;
-          cursor: pointer; border-bottom: 3px solid transparent;
-          transition: all 0.2s; margin-bottom: -2px; white-space: nowrap;
-        }
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #e0d8cc; overflow-x: auto; }
+        .tab { padding: 10px 16px; background: none; border: none; font-size: 0.88rem; font-weight: 500; color: #888; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; margin-bottom: -2px; white-space: nowrap; font-family: 'DM Sans', sans-serif; }
         .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
 
-        .card {
-          background: #fff; border-radius: 14px; padding: 20px;
-          margin-bottom: 12px;
-          box-shadow: 0 2px 10px rgba(45,74,45,0.06);
-          cursor: pointer; transition: all 0.2s;
-        }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(45,74,45,0.1); }
-        .card-title { font-weight: 600; font-size: 1rem; color: #1a1a1a; margin-bottom: 8px; }
-        .card-meta { font-size: 0.85rem; color: #999; margin-bottom: 12px; }
-        .card-route { font-size: 0.9rem; color: #555; margin-bottom: 12px; }
-        
-        .btn {
-          padding: 8px 16px; border-radius: 10px; border: none;
-          font-size: 0.85rem; font-weight: 500; cursor: pointer;
-          transition: all 0.2s;
-        }
+        .job-card { background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(45,74,45,0.06); border: 1px solid #f0ebe0; }
+        .job-card.mine { border-left: 4px solid #7ab87a; }
+        .job-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 8px; }
+        .job-title { font-weight: 700; font-size: 1rem; color: #1a1a1a; flex: 1; }
+        .job-amount { font-family: 'Fraunces', serif; font-size: 1.3rem; font-weight: 700; color: #2d4a2d; white-space: nowrap; }
+
+        .address-block { background: #f5f0e8; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+        .address-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.88rem; }
+        .address-row:last-child { margin-bottom: 0; }
+        .address-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+        .address-text { color: #333; line-height: 1.4; }
+        .address-label { font-size: 0.72rem; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .instructions { background: #fff9e6; border: 1px solid #ffe9a0; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.85rem; color: #7a5c00; }
+
+        .job-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .meta-tag { background: #f5f0e8; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; color: #666; }
+        .meta-tag.payment { background: #e8f5e9; color: #2d6a2d; }
+
+        .job-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn { padding: 9px 16px; border-radius: 10px; border: none; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
         .btn-primary { background: #2d4a2d; color: #f5f0e8; }
         .btn-primary:hover { background: #3d6b3d; }
         .btn-success { background: #7ab87a; color: #fff; }
         .btn-success:hover { background: #5fa05f; }
-        .btn-secondary { background: #f5f0e8; color: #555; }
+        .btn-secondary { background: #f5f0e8; color: #555; border: 1px solid #e0d8cc; }
         .btn-secondary:hover { background: #e8e0d4; }
         .btn-danger { background: #dc3545; color: #fff; }
-        .btn-danger:hover { background: #c82333; }
-        .btn-small { padding: 4px 8px; font-size: 0.75rem; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
 
-        .badge {
-          display: inline-block; padding: 3px 10px; border-radius: 100px;
-          font-size: 0.75rem; font-weight: 500; margin-left: 8px;
-        }
+        .customer-contact { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #f0f7f0; border-radius: 10px; margin-bottom: 10px; }
+        .customer-name { font-weight: 600; font-size: 0.9rem; color: #2d4a2d; flex: 1; }
+
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.75rem; font-weight: 600; }
         .badge-open { background: #d4f0d4; color: #2d6a2d; }
         .badge-accepted { background: #fdf3cc; color: #7a5c00; }
         .badge-completed { background: #e8e8e8; color: #555; }
 
         .empty { text-align: center; padding: 60px 20px; color: #bbb; }
         .empty-icon { font-size: 3rem; margin-bottom: 12px; }
-        .actions { display: flex; gap: 8px; margin-top: 12px; }
 
-        .form-input {
-          width: 100%; padding: 10px 12px; margin-bottom: 12px;
-          border: 1.5px solid #e0d8cc; border-radius: 8px;
-          font-size: 0.9rem; font-family: 'DM Sans', sans-serif;
-          background: #faf8f4; outline: none;
+        .history-stats { background: #f0f7f0; border-radius: 14px; padding: 20px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; }
+        .hist-stat { text-align: center; }
+        .hist-label { font-size: 0.7rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .hist-value { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
+        .hist-sub { font-size: 0.75rem; color: #7ab87a; margin-top: 2px; }
+
+        .form-input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1.5px solid #e0d8cc; border-radius: 8px; font-size: 0.9rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; outline: none; }
+        .form-input:focus { border-color: #7ab87a; }
+
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .section-title { font-size: 1rem; font-weight: 700; color: #2d4a2d; }
+
+        @media (max-width: 500px) {
+          .stats { grid-template-columns: repeat(2, 1fr); }
         }
-        .form-input:focus { border-color: #7ab87a; background: #fff; }
       `}</style>
 
       <div className="page">
         <div className="header">
-          <div className="header-left">
+          <div>
             <div className="logo">errand<span>s</span></div>
             <div className="subtitle">Runner Dashboard</div>
           </div>
           <div className="header-right">
-            {dbUserId && (
-              <NotificationBell userId={dbUserId} role="runner" />
-            )}
-            <button className="back-btn" onClick={() => router.push('/')}>
-              ← Home
+            {dbUserId && <NotificationBell userId={dbUserId} role="runner" />}
+            <button className="refresh-btn" onClick={() => loadData(true)} disabled={refreshing}>
+              {refreshing ? '⟳' : '↻'} Refresh
             </button>
+            <button className="back-btn" onClick={() => router.push('/')}>← Home</button>
           </div>
         </div>
 
+        {/* Stats */}
         <div className="stats">
           <div className="stat-card">
-            <div className="stat-label">Available Jobs</div>
+            <div className="stat-label">Available</div>
             <div className="stat-value">{openRequests.length}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">My Active Jobs</div>
+            <div className="stat-label">Active Jobs</div>
             <div className="stat-value">{myJobs.length}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Completed</div>
-            <div className="stat-value">{completedJobs.length}</div>
+            <div className="stat-label">This Month</div>
+            <div className="stat-value">${monthEarned.toFixed(0)}</div>
+            <div className="stat-sub">{completedJobs.filter(j => {
+              const d = new Date(j.created_at); const n = new Date();
+              return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+            }).length} jobs</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">All Time</div>
+            <div className="stat-value">${totalEarned.toFixed(0)}</div>
+            <div className="stat-sub">{completedJobs.length} jobs</div>
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="tabs">
           <button className={`tab ${tab === "available" ? "active" : ""}`} onClick={() => setTab("available")}>
             Available ({openRequests.length})
@@ -318,6 +330,7 @@ export default function RunnerDashboard() {
           </button>
         </div>
 
+        {/* Available Jobs */}
         {tab === "available" && (
           <>
             {openRequests.length === 0 ? (
@@ -325,72 +338,125 @@ export default function RunnerDashboard() {
                 <div className="empty-icon">📦</div>
                 No available jobs right now. Check back soon!
               </div>
-            ) : (
-              openRequests.map(r => (
-                <div key={r.id} className="card">
-                  <div className="card-title">
-                    {r.title}
-                    <span className="badge badge-open">Open</span>
+            ) : openRequests.map(r => (
+              <div key={r.id} className="job-card">
+                <div className="job-top">
+                  <div className="job-title">{r.title}</div>
+                  {r.offered_amount ? (
+                    <div className="job-amount">${r.offered_amount}</div>
+                  ) : null}
+                </div>
+
+                <div className="address-block">
+                  <div className="address-row">
+                    <div className="address-icon">📍</div>
+                    <div>
+                      <div className="address-label">Pickup</div>
+                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.pickup)}</div>
+                    </div>
                   </div>
-                  <div className="card-route">
-                    📍 {r.pickup} → 🏠 {r.dropoff}
-                  </div>
-                  <div className="card-meta">
-                    {r.offered_amount && `💰 $${r.offered_amount} • `}
-                    {r.pickup_flexibility === 'asap' && 'ASAP • '}
-                    Posted {new Date(r.created_at).toLocaleDateString()}
-                    {r.delivery_zip && ` • ZIP: ${r.delivery_zip}`}
-                  </div>
-                  <div className="actions">
-                    <button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); acceptRequest(r.id); }}>
-                      Accept Job
-                    </button>
-                    <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
-                      View Details
-                    </button>
+                  <div className="address-row">
+                    <div className="address-icon">🏠</div>
+                    <div>
+                      <div className="address-label">Deliver to</div>
+                      <div className="address-text">{formatAddress(r.delivery_street, r.delivery_city, r.delivery_state, r.delivery_zip, r.dropoff)}</div>
+                    </div>
                   </div>
                 </div>
-              ))
-            )}
+
+                {r.delivery_instructions && (
+                  <div className="instructions">
+                    📝 <strong>Delivery instructions:</strong> {r.delivery_instructions}
+                  </div>
+                )}
+
+                <div className="job-meta">
+                  {r.payment_method && <span className="meta-tag payment">💳 {r.payment_method}</span>}
+                  {r.pickup_flexibility && <span className="meta-tag">⏱ {r.pickup_flexibility}</span>}
+                  <span className="meta-tag">📅 {new Date(r.created_at).toLocaleDateString()}</span>
+                  {r.delivery_zip && <span className="meta-tag">📮 {r.delivery_zip}</span>}
+                </div>
+
+                <div className="job-actions">
+                  <button className="btn btn-primary" onClick={() => acceptRequest(r.id)}>
+                    ✅ Accept Job
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => router.push(`/request/${r.id}`)}>
+                    💬 View & Chat
+                  </button>
+                </div>
+              </div>
+            ))}
           </>
         )}
 
+        {/* My Active Jobs */}
         {tab === "myjobs" && (
           <>
             {myJobs.length === 0 ? (
               <div className="empty">
                 <div className="empty-icon">📋</div>
-                You haven't accepted any jobs yet
+                No active jobs. Accept one from Available Jobs!
               </div>
-            ) : (
-              myJobs.map(r => (
-                <div key={r.id} className="card" onClick={() => router.push(`/request/${r.id}`)}>
-                  <div className="card-title">
-                    {r.title}
-                    <span className={`badge badge-${r.status}`}>{r.status}</span>
-                  </div>
-                  <div className="card-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
-                  <div className="card-meta">
-                    {r.offered_amount && `💰 $${r.offered_amount} • `}
-                    {r.customer_name && `Customer: ${r.customer_name} • `}
-                    {new Date(r.created_at).toLocaleDateString()}
-                  </div>
-                  {r.status === 'accepted' && (
-                    <div className="actions">
-                      <button className="btn btn-success" onClick={(e) => { e.stopPropagation(); completeRequest(r.id); }}>
-                        Mark Complete
-                      </button>
-                      <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
-                        💬 Chat
-                      </button>
-                    </div>
-                  )}
+            ) : myJobs.map(r => (
+              <div key={r.id} className="job-card mine">
+                <div className="job-top">
+                  <div className="job-title">{r.title}</div>
+                  {r.offered_amount ? <div className="job-amount">${r.offered_amount}</div> : null}
                 </div>
-              ))
-            )}
+
+                {r.customer_name && (
+                  <div className="customer-contact">
+                    <span>👤</span>
+                    <span className="customer-name">{r.customer_name}</span>
+                    <button className="btn btn-secondary btn-sm" onClick={() => router.push(`/request/${r.id}`)}>
+                      💬 Chat
+                    </button>
+                  </div>
+                )}
+
+                <div className="address-block">
+                  <div className="address-row">
+                    <div className="address-icon">📍</div>
+                    <div>
+                      <div className="address-label">Pickup</div>
+                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.pickup)}</div>
+                    </div>
+                  </div>
+                  <div className="address-row">
+                    <div className="address-icon">🏠</div>
+                    <div>
+                      <div className="address-label">Deliver to</div>
+                      <div className="address-text">{formatAddress(r.delivery_street, r.delivery_city, r.delivery_state, r.delivery_zip, r.dropoff)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {r.delivery_instructions && (
+                  <div className="instructions">
+                    📝 <strong>Delivery instructions:</strong> {r.delivery_instructions}
+                  </div>
+                )}
+
+                <div className="job-meta">
+                  {r.payment_method && <span className="meta-tag payment">💳 {r.payment_method}</span>}
+                  {r.pickup_flexibility && <span className="meta-tag">⏱ {r.pickup_flexibility}</span>}
+                </div>
+
+                <div className="job-actions">
+                  <button className="btn btn-success" onClick={() => completeRequest(r.id)}>
+                    ✅ Mark Complete
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => router.push(`/request/${r.id}`)}>
+                    💬 Chat
+                  </button>
+                </div>
+              </div>
+            ))}
           </>
         )}
 
+        {/* History */}
         {tab === "history" && (
           <>
             {completedJobs.length === 0 ? (
@@ -400,43 +466,41 @@ export default function RunnerDashboard() {
               </div>
             ) : (
               <>
-                <div style={{
-                  background: '#f0f7f0', padding: '16px', borderRadius: '12px',
-                  marginBottom: '20px',
-                  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px'
-                }}>
-                  <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>TOTAL DELIVERIES</div>
-                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
-                      {completedJobs.length}
-                    </div>
+                <div className="history-stats">
+                  <div className="hist-stat">
+                    <div className="hist-label">Total Deliveries</div>
+                    <div className="hist-value">{completedJobs.length}</div>
                   </div>
-                  <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>TOTAL EARNED</div>
-                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
-                      ${completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0).toFixed(2)}
-                    </div>
+                  <div className="hist-stat">
+                    <div className="hist-label">All Time Earned</div>
+                    <div className="hist-value">${totalEarned.toFixed(2)}</div>
                   </div>
-                  <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>AVG PER DELIVERY</div>
-                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
-                      ${(completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0) / completedJobs.length).toFixed(2)}
-                    </div>
+                  <div className="hist-stat">
+                    <div className="hist-label">This Month</div>
+                    <div className="hist-value">${monthEarned.toFixed(2)}</div>
+                    <div className="hist-sub">↑ Keep it up!</div>
+                  </div>
+                  <div className="hist-stat">
+                    <div className="hist-label">Avg Per Job</div>
+                    <div className="hist-value">${completedJobs.length ? (totalEarned / completedJobs.length).toFixed(2) : '0.00'}</div>
                   </div>
                 </div>
+
                 {completedJobs.map(r => (
-                  <div key={r.id} className="card" onClick={() => router.push(`/request/${r.id}`)}>
-                    <div className="card-title">
-                      {r.title}
-                      <span className="badge" style={{background: '#d4f0d4', color: '#2d6a2d'}}>✅ Completed</span>
+                  <div key={r.id} className="job-card" onClick={() => router.push(`/request/${r.id}`)}>
+                    <div className="job-top">
+                      <div className="job-title">{r.title}</div>
+                      <div className="job-amount" style={{color: '#7ab87a'}}>+${r.offered_amount?.toFixed(2) || '0.00'}</div>
                     </div>
-                    <div className="card-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
-                    <div className="card-meta">
-                      {r.customer_name && `👤 ${r.customer_name} • `}
-                      {new Date(r.created_at).toLocaleDateString()}
+                    <div style={{fontSize: '0.85rem', color: '#888', marginBottom: '8px'}}>
+                      📍 {formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.pickup)}
+                      {' → '}
+                      🏠 {formatAddress(r.delivery_street, r.delivery_city, r.delivery_state, r.delivery_zip, r.dropoff)}
                     </div>
-                    <div style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f0f0f0', fontSize: '1.2rem', fontWeight: 600, color: '#2d4a2d'}}>
-                      + ${r.offered_amount?.toFixed(2) || '0.00'}
+                    <div className="job-meta">
+                      {r.customer_name && <span className="meta-tag">👤 {r.customer_name}</span>}
+                      <span className="meta-tag">📅 {new Date(r.created_at).toLocaleDateString()}</span>
+                      {r.payment_method && <span className="meta-tag payment">💳 {r.payment_method}</span>}
                     </div>
                   </div>
                 ))}
@@ -445,48 +509,49 @@ export default function RunnerDashboard() {
           </>
         )}
 
+        {/* Merchants */}
         {tab === "merchants" && (
           <>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
-              <div style={{fontSize: '1.1rem', fontWeight: 600, color: '#2d4a2d'}}>My Merchant List</div>
+            <div className="section-header">
+              <div className="section-title">My Merchant List</div>
               {canAddMerchants && (
-                <button className="btn btn-primary" onClick={openMerchantForm}>+ Add Merchant</button>
+                <button className="btn btn-primary btn-sm" onClick={() => {
+                  setMerchantName(""); setMerchantCategory("grocery");
+                  setMerchantAddress(""); setMerchantZip(userZip);
+                  setShowMerchantForm(true);
+                }}>
+                  + Add Merchant
+                </button>
               )}
             </div>
 
+            {!userZip && (
+              <div style={{background: '#fff3cd', border: '1px solid #ffc107', color: '#856404', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.88rem'}}>
+                ⚠️ Add your ZIP code in <button style={{background: 'none', border: 'none', color: '#856404', textDecoration: 'underline', cursor: 'pointer'}} onClick={() => router.push('/profile')}>Profile Settings</button> to see merchants in your area.
+              </div>
+            )}
+
             {!canAddMerchants && (
-              <div style={{background: '#fff3cd', border: '1px solid #ffc107', color: '#856404', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '0.9rem'}}>
+              <div style={{background: '#ffe0e0', border: '1px solid #ffaaaa', color: '#c00', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.88rem'}}>
                 ⚠️ You cannot add merchants. Contact support if this is an error.
               </div>
             )}
 
             {showMerchantForm && (
-              <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(45,74,45,0.1)'}}>
-                <div style={{fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: '#2d4a2d'}}>Add Merchant</div>
+              <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(45,74,45,0.1)'}}>
+                <div style={{fontWeight: 700, marginBottom: '14px', color: '#2d4a2d'}}>Add Merchant</div>
                 <input className="form-input" placeholder="Business Name *" value={merchantName} onChange={e => setMerchantName(e.target.value)} />
                 <select className="form-input" value={merchantCategory} onChange={e => setMerchantCategory(e.target.value)}>
-                  <option value="grocery">grocery</option>
-                  <option value="restaurant">restaurant</option>
-                  <option value="cafe">cafe</option>
-                  <option value="pharmacy">pharmacy</option>
-                  <option value="convenience_store">convenience_store</option>
-                  <option value="clothing_store">clothing_store</option>
-                  <option value="pet_store">pet_store</option>
-                  <option value="hardware">hardware</option>
-                  <option value="salon">salon</option>
-                  <option value="gas_station">gas_station</option>
-                  <option value="dry_cleaning">dry_cleaning</option>
-                  <option value="shipping">shipping</option>
-                  <option value="other">other</option>
+                  {['restaurant','cafe','grocery','pharmacy','convenience_store','clothing_store','pet_store','hardware','salon','gas_station','dry_cleaning','shipping','other'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
                 <input className="form-input" placeholder="ZIP Code *" value={merchantZip} onChange={e => setMerchantZip(e.target.value)} />
-                {merchantZip !== userZip && merchantZip.length === 5 && (
-                  <div style={{fontSize: '0.85rem', color: '#856404', marginBottom: '12px'}}>
-                    ℹ️ Outside your area — will be personal only
-                  </div>
+                {merchantZip && merchantZip !== userZip && merchantZip.length === 5 && (
+                  <div style={{fontSize: '0.82rem', color: '#856404', marginBottom: '10px'}}>ℹ️ Outside your area — personal only</div>
                 )}
-                <input className="form-input" placeholder="Address" value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} />
-                <div style={{display: 'flex', gap: '8px', marginTop: '4px'}}>
+                <input className="form-input" placeholder="Address (optional)" value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} />
+                <div style={{display: 'flex', gap: '8px'}}>
                   <button className="btn btn-success" onClick={saveMerchant}>Save</button>
                   <button className="btn btn-secondary" onClick={() => setShowMerchantForm(false)}>Cancel</button>
                 </div>
@@ -498,28 +563,18 @@ export default function RunnerDashboard() {
                 <div className="empty-icon">🏪</div>
                 No merchants yet. Add your first one!
               </div>
-            ) : (
-              merchants.map((m: any) => (
-                <div key={m.id} style={{background: '#fff', borderRadius: '12px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                  <div>
-                    <div style={{fontWeight: 600, fontSize: '1rem', color: '#1a1a1a', marginBottom: '4px'}}>
-                      {m.name}
-                      {m.is_personal && (
-                        <span style={{background: '#e3f2fd', color: '#1976d2', padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', marginLeft: '8px'}}>
-                          Personal
-                        </span>
-                      )}
-                    </div>
-                    <div style={{fontSize: '0.85rem', color: '#666'}}>
-                      {m.category} • {m.zip}{m.address && ` • ${m.address}`}
-                    </div>
+            ) : merchants.map((m: any) => (
+              <div key={m.id} style={{background: '#fff', borderRadius: '12px', padding: '14px 16px', marginBottom: '10px', boxShadow: '0 2px 6px rgba(45,74,45,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <div>
+                  <div style={{fontWeight: 600, fontSize: '0.95rem', color: '#1a1a1a', marginBottom: '3px'}}>
+                    {m.name}
+                    {m.is_personal && <span style={{background: '#e3f2fd', color: '#1976d2', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', marginLeft: '8px'}}>Personal</span>}
                   </div>
-                  <button className="btn btn-danger btn-small" onClick={() => hideMerchant(m.id, m.name)}>
-                    Remove
-                  </button>
+                  <div style={{fontSize: '0.82rem', color: '#888'}}>{m.category} • {m.zip}{m.address && ` • ${m.address}`}</div>
                 </div>
-              ))
-            )}
+                <button className="btn btn-danger btn-sm" onClick={() => hideMerchant(m.id, m.name)}>Remove</button>
+              </div>
+            ))}
           </>
         )}
       </div>
