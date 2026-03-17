@@ -76,6 +76,7 @@ export default function Home() {
   const [offeredAmount, setOfferedAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [description, setDescription] = useState("");
   const [showDetails, setShowDetails] = useState(false);
   
   // Merchant selection
@@ -262,7 +263,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           title,
-          description: "",
+          description: description || null,
           customer_id: dbUserId,
           pickup_street: pickupStreet,
           pickup_city: pickupCity,
@@ -286,7 +287,7 @@ export default function Home() {
 
       if (res.ok) {
         const newRequest = await res.json();
-        setTitle("");
+        setTitle(""); setDescription("");
         setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip("");
         setDeliveryStreet(profileStreet); setDeliveryCity(profileCity);
         setDeliveryState(profileState); setDeliveryZip(profileZip);
@@ -581,9 +582,16 @@ export default function Home() {
             <div className="card-title">Post a Request</div>
             <form onSubmit={submit}>
               <div className="form-group">
-                <label className="label">What do you need?</label>
-                <input className="input" placeholder="e.g. Pick up prescription from CVS"
+                <label className="label">What do you need? *</label>
+                <input className="input" placeholder="e.g. Pick up prescription from Walgreens"
                   value={title} onChange={e => setTitle(e.target.value)} required />
+              </div>
+
+              <div className="form-group">
+                <label className="label">More details (optional)</label>
+                <textarea className="textarea" placeholder="Any extra info the runner should know — specific items, quantities, brand preferences, special instructions, etc."
+                  value={description} onChange={e => setDescription(e.target.value)}
+                  style={{minHeight: '70px'}} />
               </div>
 
               <div className="section-label">Delivery Address</div>
@@ -648,14 +656,14 @@ export default function Home() {
                 </div>
               )}
 
-              <div className="section-label">Pickup Location</div>
+              <div className="section-label">Pickup Location <span style={{fontFamily:'DM Sans,sans-serif', fontWeight:400, fontSize:'0.8rem', color:'#999'}}>(optional)</span></div>
 
               {activeZip.length === 5 && !territory && (
                 <div className="alert alert-error">
                   No service available in ZIP {activeZip} at this time
                 </div>
               )}
-              {activeZip.length < 5 && (
+              {activeZip.length < 5 && !usingProfileAddress && (
                 <div className="alert alert-warning">
                   Enter your delivery ZIP code first to see available merchants
                 </div>
@@ -664,17 +672,17 @@ export default function Home() {
               {availableMerchants.length > 0 && !useCustomPickup && (
                 <>
                   <div className="form-group">
-                    <label className="label">Select Merchant</label>
+                    <label className="label">Select Merchant (optional)</label>
                     <select className="select" value={selectedMerchant || ""}
                       onChange={e => setSelectedMerchant(e.target.value ? parseInt(e.target.value) : null)}>
-                      <option value="">Choose a merchant...</option>
+                      <option value="">No merchant / describe in notes above</option>
                       {availableMerchants.map(m => (
                         <option key={m.id} value={m.id}>{m.name} - {m.address}</option>
                       ))}
                     </select>
                   </div>
                   <button type="button" className="link-btn" onClick={() => setUseCustomPickup(true)}>
-                    Or enter custom pickup address
+                    Or enter a custom pickup address
                   </button>
                 </>
               )}
