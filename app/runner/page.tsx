@@ -1,9 +1,10 @@
-// app/runner/page.tsx - Driver dashboard
+// app/runner/page.tsx - Runner dashboard with notifications
 
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import NotificationBell from "@/components/NotificationBell";
 
 type Request = {
   id: number;
@@ -20,7 +21,7 @@ type Request = {
   delivery_zip?: string;
 };
 
-export default function DriverDashboard() {
+export default function RunnerDashboard() {
   const { user, dbUserId, loading } = useAuth();
   const router = useRouter();
   
@@ -52,14 +53,12 @@ export default function DriverDashboard() {
   const loadData = async () => {
     setLoadingData(true);
     try {
-      // Get user info first
       const userRes = await fetch(`/.netlify/functions/users-get?id=${dbUserId}`);
       if (userRes.ok) {
         const userData = await userRes.json();
         setUserZip(userData.zip || "");
         setCanAddMerchants(userData.can_add_merchants !== false);
         
-        // Load merchants for user's ZIP
         if (userData.zip) {
           const merchRes = await fetch(
             `/.netlify/functions/merchants-get-for-user?user_id=${dbUserId}&zip=${userData.zip}`
@@ -70,25 +69,17 @@ export default function DriverDashboard() {
         }
       }
       
-      // Load requests
       const res = await fetch("/.netlify/functions/requests-get");
       if (res.ok) {
         const all = await res.json();
-        
-        // Open requests in unclaimed territories (assigned_to is null) 
-        // OR requests specifically assigned to me
         const open = all.filter((r: Request) => 
           r.status === 'open' && (!r.assigned_to || r.assigned_to === dbUserId)
         );
         setOpenRequests(open);
-        
-        // My active jobs (accepted but not completed)
         const mine = all.filter((r: Request) => 
           r.assigned_to === dbUserId && r.status === 'accepted'
         );
         setMyJobs(mine);
-        
-        // My completed deliveries
         const completed = all.filter((r: Request) => 
           r.assigned_to === dbUserId && r.status === 'completed'
         );
@@ -113,44 +104,32 @@ export default function DriverDashboard() {
       const res = await fetch("/.netlify/functions/requests-accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          request_id: requestId,
-          driver_id: dbUserId 
-        }),
+        body: JSON.stringify({ request_id: requestId, runner_id: dbUserId }),
       });
-
       if (res.ok) {
         loadData();
         alert("✅ Request accepted! Customer has been notified.");
       } else {
-        alert("❌ Request already accepted by another driver");
+        alert("❌ Request already accepted by another runner");
       }
     } catch (e) {
-      console.error("Accept failed:", e);
       alert("Failed to accept request");
     }
   };
 
   const completeRequest = async (requestId: number) => {
     if (!confirm("Mark this job as completed?")) return;
-    
     await fetch("/.netlify/functions/requests-complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request_id: requestId }),
     });
-    
     loadData();
   };
 
   const openMerchantForm = () => {
-    setMerchantName("");
-    setMerchantCategory("grocery");
-    setMerchantAddress("");
-    setMerchantZip(userZip);
-    setMerchantPhone("");
-    setMerchantHours("");
-    setMerchantWebsite("");
+    setMerchantName(""); setMerchantCategory("grocery"); setMerchantAddress("");
+    setMerchantZip(userZip); setMerchantPhone(""); setMerchantHours(""); setMerchantWebsite("");
     setShowMerchantForm(true);
   };
 
@@ -159,35 +138,25 @@ export default function DriverDashboard() {
       alert("Name, category, and ZIP are required");
       return;
     }
-
     try {
       const res = await fetch("/.netlify/functions/merchants-create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: dbUserId,
-          name: merchantName,
-          category: merchantCategory,
-          address: merchantAddress,
-          zip: merchantZip,
-          phone: merchantPhone,
-          hours: merchantHours,
-          website: merchantWebsite,
-          user_zip: userZip,
+          user_id: dbUserId, name: merchantName, category: merchantCategory,
+          address: merchantAddress, zip: merchantZip, phone: merchantPhone,
+          hours: merchantHours, website: merchantWebsite, user_zip: userZip,
         }),
       });
-
       if (!res.ok) {
         const error = await res.json();
         alert(`Failed: ${error.error}`);
         return;
       }
-
       setShowMerchantForm(false);
       loadData();
-      
       const isPersonal = merchantZip !== userZip;
-      alert(isPersonal 
+      alert(isPersonal
         ? `✅ Added to your personal list`
         : `✅ Added! Everyone in ZIP ${merchantZip} can see it.`
       );
@@ -198,13 +167,11 @@ export default function DriverDashboard() {
 
   const hideMerchant = async (merchantId: number, merchantName: string) => {
     if (!confirm(`Remove "${merchantName}"? (Won't delete for others)`)) return;
-
     await fetch("/.netlify/functions/merchants-hide", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: dbUserId, merchant_id: merchantId }),
     });
-    
     loadData();
   };
 
@@ -222,10 +189,21 @@ export default function DriverDashboard() {
         body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
         .page { max-width: 800px; margin: 0 auto; padding: 32px 20px; }
         
-        .header { margin-bottom: 32px; }
+        .header {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          margin-bottom: 32px;
+        }
+        .header-left {}
         .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
         .subtitle { color: #888; font-size: 0.9rem; margin-top: 4px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .back-btn {
+          background: #f5f0e8; border: 1.5px solid #e0d8cc;
+          padding: 8px 14px; border-radius: 8px; cursor: pointer;
+          font-size: 0.85rem; color: #2d4a2d; font-weight: 500;
+        }
+        .back-btn:hover { background: #e8e0d4; }
 
         .stats {
           display: grid; grid-template-columns: repeat(3, 1fr);
@@ -238,12 +216,12 @@ export default function DriverDashboard() {
         .stat-label { font-size: 0.75rem; color: #999; margin-bottom: 4px; }
         .stat-value { font-family: 'Fraunces', serif; font-size: 1.5rem; color: #2d4a2d; font-weight: 700; }
 
-        .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e0d8cc; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #e0d8cc; overflow-x: auto; }
         .tab {
           padding: 12px 20px; background: none; border: none;
           font-size: 0.9rem; font-weight: 500; color: #666;
           cursor: pointer; border-bottom: 3px solid transparent;
-          transition: all 0.2s; margin-bottom: -2px;
+          transition: all 0.2s; margin-bottom: -2px; white-space: nowrap;
         }
         .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
 
@@ -269,6 +247,9 @@ export default function DriverDashboard() {
         .btn-success:hover { background: #5fa05f; }
         .btn-secondary { background: #f5f0e8; color: #555; }
         .btn-secondary:hover { background: #e8e0d4; }
+        .btn-danger { background: #dc3545; color: #fff; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-small { padding: 4px 8px; font-size: 0.75rem; }
 
         .badge {
           display: inline-block; padding: 3px 10px; border-radius: 100px;
@@ -280,14 +261,31 @@ export default function DriverDashboard() {
 
         .empty { text-align: center; padding: 60px 20px; color: #bbb; }
         .empty-icon { font-size: 3rem; margin-bottom: 12px; }
-
         .actions { display: flex; gap: 8px; margin-top: 12px; }
+
+        .form-input {
+          width: 100%; padding: 10px 12px; margin-bottom: 12px;
+          border: 1.5px solid #e0d8cc; border-radius: 8px;
+          font-size: 0.9rem; font-family: 'DM Sans', sans-serif;
+          background: #faf8f4; outline: none;
+        }
+        .form-input:focus { border-color: #7ab87a; background: #fff; }
       `}</style>
 
       <div className="page">
         <div className="header">
-          <div className="logo">errand<span>s</span></div>
-          <div className="subtitle">Driver Dashboard</div>
+          <div className="header-left">
+            <div className="logo">errand<span>s</span></div>
+            <div className="subtitle">Runner Dashboard</div>
+          </div>
+          <div className="header-right">
+            {dbUserId && (
+              <NotificationBell userId={dbUserId} role="runner" />
+            )}
+            <button className="back-btn" onClick={() => router.push('/')}>
+              ← Home
+            </button>
+          </div>
         </div>
 
         <div className="stats">
@@ -297,37 +295,25 @@ export default function DriverDashboard() {
           </div>
           <div className="stat-card">
             <div className="stat-label">My Active Jobs</div>
-            <div className="stat-value">{myJobs.filter(j => j.status === 'accepted').length}</div>
+            <div className="stat-value">{myJobs.length}</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Completed</div>
-            <div className="stat-value">{myJobs.filter(j => j.status === 'completed').length}</div>
+            <div className="stat-value">{completedJobs.length}</div>
           </div>
         </div>
 
         <div className="tabs">
-          <button 
-            className={`tab ${tab === "available" ? "active" : ""}`}
-            onClick={() => setTab("available")}
-          >
-            Available Jobs ({openRequests.length})
+          <button className={`tab ${tab === "available" ? "active" : ""}`} onClick={() => setTab("available")}>
+            Available ({openRequests.length})
           </button>
-          <button 
-            className={`tab ${tab === "myjobs" ? "active" : ""}`}
-            onClick={() => setTab("myjobs")}
-          >
+          <button className={`tab ${tab === "myjobs" ? "active" : ""}`} onClick={() => setTab("myjobs")}>
             My Jobs ({myJobs.length})
           </button>
-          <button 
-            className={`tab ${tab === "history" ? "active" : ""}`}
-            onClick={() => setTab("history")}
-          >
+          <button className={`tab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
             History ({completedJobs.length})
           </button>
-          <button 
-            className={`tab ${tab === "merchants" ? "active" : ""}`}
-            onClick={() => setTab("merchants")}
-          >
+          <button className={`tab ${tab === "merchants" ? "active" : ""}`} onClick={() => setTab("merchants")}>
             Merchants ({merchants.length})
           </button>
         </div>
@@ -356,22 +342,10 @@ export default function DriverDashboard() {
                     {r.delivery_zip && ` • ZIP: ${r.delivery_zip}`}
                   </div>
                   <div className="actions">
-                    <button 
-                      className="btn btn-primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        acceptRequest(r.id);
-                      }}
-                    >
+                    <button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); acceptRequest(r.id); }}>
                       Accept Job
                     </button>
-                    <button 
-                      className="btn btn-secondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/request/${r.id}`);
-                      }}
-                    >
+                    <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
                       View Details
                     </button>
                   </div>
@@ -395,9 +369,7 @@ export default function DriverDashboard() {
                     {r.title}
                     <span className={`badge badge-${r.status}`}>{r.status}</span>
                   </div>
-                  <div className="card-route">
-                    📍 {r.pickup} → 🏠 {r.dropoff}
-                  </div>
+                  <div className="card-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
                   <div className="card-meta">
                     {r.offered_amount && `💰 $${r.offered_amount} • `}
                     {r.customer_name && `Customer: ${r.customer_name} • `}
@@ -405,23 +377,11 @@ export default function DriverDashboard() {
                   </div>
                   {r.status === 'accepted' && (
                     <div className="actions">
-                      <button 
-                        className="btn btn-success"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          completeRequest(r.id);
-                        }}
-                      >
+                      <button className="btn btn-success" onClick={(e) => { e.stopPropagation(); completeRequest(r.id); }}>
                         Mark Complete
                       </button>
-                      <button 
-                        className="btn btn-secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/request/${r.id}`);
-                        }}
-                      >
-                        Chat
+                      <button className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
+                        💬 Chat
                       </button>
                     </div>
                   )}
@@ -435,84 +395,47 @@ export default function DriverDashboard() {
           <>
             {completedJobs.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">🚗</div>
+                <div className="empty-icon">📖</div>
                 No completed deliveries yet
               </div>
             ) : (
               <>
                 <div style={{
-                  background: '#f0f7f0',
-                  padding: '16px',
-                  borderRadius: '12px',
+                  background: '#f0f7f0', padding: '16px', borderRadius: '12px',
                   marginBottom: '20px',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                  gap: '12px'
+                  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px'
                 }}>
                   <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
-                      TOTAL DELIVERIES
-                    </div>
-                    <div style={{
-                      fontFamily: 'Fraunces, serif',
-                      fontSize: '1.8rem',
-                      fontWeight: 700,
-                      color: '#2d4a2d'
-                    }}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>TOTAL DELIVERIES</div>
+                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
                       {completedJobs.length}
                     </div>
                   </div>
                   <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
-                      TOTAL EARNED
-                    </div>
-                    <div style={{
-                      fontFamily: 'Fraunces, serif',
-                      fontSize: '1.8rem',
-                      fontWeight: 700,
-                      color: '#2d4a2d'
-                    }}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>TOTAL EARNED</div>
+                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
                       ${completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0).toFixed(2)}
                     </div>
                   </div>
                   <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>
-                      AVG PER DELIVERY
-                    </div>
-                    <div style={{
-                      fontFamily: 'Fraunces, serif',
-                      fontSize: '1.8rem',
-                      fontWeight: 700,
-                      color: '#2d4a2d'
-                    }}>
+                    <div style={{fontSize: '0.75rem', color: '#666', marginBottom: '4px'}}>AVG PER DELIVERY</div>
+                    <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.8rem', fontWeight: 700, color: '#2d4a2d'}}>
                       ${(completedJobs.reduce((sum, j) => sum + (j.offered_amount || 0), 0) / completedJobs.length).toFixed(2)}
                     </div>
                   </div>
                 </div>
-                
                 {completedJobs.map(r => (
                   <div key={r.id} className="card" onClick={() => router.push(`/request/${r.id}`)}>
                     <div className="card-title">
                       {r.title}
-                      <span className="badge" style={{background: '#d4f0d4', color: '#2d6a2d'}}>
-                        ✅ Completed
-                      </span>
+                      <span className="badge" style={{background: '#d4f0d4', color: '#2d6a2d'}}>✅ Completed</span>
                     </div>
-                    <div className="card-route">
-                      📍 {r.pickup} → 🏠 {r.dropoff}
-                    </div>
+                    <div className="card-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
                     <div className="card-meta">
                       {r.customer_name && `👤 ${r.customer_name} • `}
                       {new Date(r.created_at).toLocaleDateString()}
                     </div>
-                    <div style={{
-                      marginTop: '12px',
-                      paddingTop: '12px',
-                      borderTop: '1px solid #f0f0f0',
-                      fontSize: '1.2rem',
-                      fontWeight: 600,
-                      color: '#2d4a2d'
-                    }}>
+                    <div style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f0f0f0', fontSize: '1.2rem', fontWeight: 600, color: '#2d4a2d'}}>
                       + ${r.offered_amount?.toFixed(2) || '0.00'}
                     </div>
                   </div>
@@ -525,68 +448,23 @@ export default function DriverDashboard() {
         {tab === "merchants" && (
           <>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
-              <div style={{fontSize: '1.1rem', fontWeight: 600, color: '#2d4a2d'}}>
-                My Merchant List
-              </div>
+              <div style={{fontSize: '1.1rem', fontWeight: 600, color: '#2d4a2d'}}>My Merchant List</div>
               {canAddMerchants && (
-                <button className="btn btn-primary" onClick={openMerchantForm}>
-                  + Add Merchant
-                </button>
+                <button className="btn btn-primary" onClick={openMerchantForm}>+ Add Merchant</button>
               )}
             </div>
 
             {!canAddMerchants && (
-              <div style={{
-                background: '#fff3cd',
-                border: '1px solid #ffc107',
-                color: '#856404',
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                fontSize: '0.9rem'
-              }}>
+              <div style={{background: '#fff3cd', border: '1px solid #ffc107', color: '#856404', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '0.9rem'}}>
                 ⚠️ You cannot add merchants. Contact support if this is an error.
               </div>
             )}
 
             {showMerchantForm && (
-              <div style={{
-                background: '#fff',
-                borderRadius: '14px',
-                padding: '20px',
-                marginBottom: '20px',
-                boxShadow: '0 2px 10px rgba(45,74,45,0.1)'
-              }}>
-                <div style={{fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: '#2d4a2d'}}>
-                  Add Merchant
-                </div>
-                
-                <input
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    marginBottom: '12px',
-                    border: '1.5px solid #e0d8cc',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                  placeholder="Business Name *"
-                  value={merchantName}
-                  onChange={e => setMerchantName(e.target.value)}
-                />
-
-                <select
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    marginBottom: '12px',
-                    border: '1.5px solid #e0d8cc',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                  value={merchantCategory}
-                  onChange={e => setMerchantCategory(e.target.value)}
-                >
+              <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(45,74,45,0.1)'}}>
+                <div style={{fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: '#2d4a2d'}}>Add Merchant</div>
+                <input className="form-input" placeholder="Business Name *" value={merchantName} onChange={e => setMerchantName(e.target.value)} />
+                <select className="form-input" value={merchantCategory} onChange={e => setMerchantCategory(e.target.value)}>
                   <option value="grocery">grocery</option>
                   <option value="restaurant">restaurant</option>
                   <option value="cafe">cafe</option>
@@ -601,47 +479,16 @@ export default function DriverDashboard() {
                   <option value="shipping">shipping</option>
                   <option value="other">other</option>
                 </select>
-
-                <input
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    marginBottom: '12px',
-                    border: '1.5px solid #e0d8cc',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                  placeholder="ZIP Code *"
-                  value={merchantZip}
-                  onChange={e => setMerchantZip(e.target.value)}
-                />
+                <input className="form-input" placeholder="ZIP Code *" value={merchantZip} onChange={e => setMerchantZip(e.target.value)} />
                 {merchantZip !== userZip && merchantZip.length === 5 && (
                   <div style={{fontSize: '0.85rem', color: '#856404', marginBottom: '12px'}}>
-                    ℹ️ Outside your area - will be personal only
+                    ℹ️ Outside your area — will be personal only
                   </div>
                 )}
-
-                <input
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    marginBottom: '12px',
-                    border: '1.5px solid #e0d8cc',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem'
-                  }}
-                  placeholder="Address"
-                  value={merchantAddress}
-                  onChange={e => setMerchantAddress(e.target.value)}
-                />
-
-                <div style={{display: 'flex', gap: '8px', marginTop: '16px'}}>
-                  <button className="btn btn-success" onClick={saveMerchant}>
-                    Save
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => setShowMerchantForm(false)}>
-                    Cancel
-                  </button>
+                <input className="form-input" placeholder="Address" value={merchantAddress} onChange={e => setMerchantAddress(e.target.value)} />
+                <div style={{display: 'flex', gap: '8px', marginTop: '4px'}}>
+                  <button className="btn btn-success" onClick={saveMerchant}>Save</button>
+                  <button className="btn btn-secondary" onClick={() => setShowMerchantForm(false)}>Cancel</button>
                 </div>
               </div>
             )}
@@ -653,41 +500,21 @@ export default function DriverDashboard() {
               </div>
             ) : (
               merchants.map((m: any) => (
-                <div key={m.id} style={{
-                  background: '#fff',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  marginBottom: '12px',
-                  boxShadow: '0 2px 8px rgba(45,74,45,0.06)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
+                <div key={m.id} style={{background: '#fff', borderRadius: '12px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                   <div>
                     <div style={{fontWeight: 600, fontSize: '1rem', color: '#1a1a1a', marginBottom: '4px'}}>
                       {m.name}
                       {m.is_personal && (
-                        <span style={{
-                          background: '#e3f2fd',
-                          color: '#1976d2',
-                          padding: '3px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          marginLeft: '8px'
-                        }}>
+                        <span style={{background: '#e3f2fd', color: '#1976d2', padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', marginLeft: '8px'}}>
                           Personal
                         </span>
                       )}
                     </div>
                     <div style={{fontSize: '0.85rem', color: '#666'}}>
-                      {m.category} • {m.zip}
-                      {m.address && ` • ${m.address}`}
+                      {m.category} • {m.zip}{m.address && ` • ${m.address}`}
                     </div>
                   </div>
-                  <button 
-                    className="btn btn-danger btn-small"
-                    onClick={() => hideMerchant(m.id, m.name)}
-                  >
+                  <button className="btn btn-danger btn-small" onClick={() => hideMerchant(m.id, m.name)}>
                     Remove
                   </button>
                 </div>
