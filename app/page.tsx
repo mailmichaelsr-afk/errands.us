@@ -280,6 +280,7 @@ export default function Home() {
           offered_amount: offeredAmount ? parseFloat(offeredAmount) : null,
           payment_method: paymentMethod,
           payment_notes: paymentNotes || null,
+          merchant_id: selectedMerchant || null,
         }),
       });
 
