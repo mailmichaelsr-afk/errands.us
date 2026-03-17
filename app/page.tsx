@@ -890,6 +890,27 @@ export default function Home() {
                           <button className="chat-btn" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
                             💬 Chat
                           </button>
+                          {isCustomer && r.status === 'open' && (
+                            <button className="chat-btn"
+                              style={{background: '#f5f0e8', color: '#2d4a2d', border: '1.5px solid #e0d8cc'}}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const newAmount = prompt(`Current offer: $${r.offered_amount || 0}\nEnter new amount:`);
+                                if (!newAmount || isNaN(parseFloat(newAmount))) return;
+                                await fetch('/.netlify/functions/requests-update-offer', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    request_id: r.id,
+                                    customer_id: dbUserId,
+                                    offered_amount: parseFloat(newAmount)
+                                  })
+                                });
+                                load();
+                              }}>
+                              💰 Update Offer
+                            </button>
+                          )}
                           {isCustomer && r.status === 'completed' && (
                             <button className="chat-btn" onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
                               style={{background: '#7ab87a', color: '#fff'}}>
