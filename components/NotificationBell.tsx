@@ -85,7 +85,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         setEnabling(false);
         return true;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Push setup failed:', err);
       alert("Failed: " + (err?.message || JSON.stringify(err)));
     }
