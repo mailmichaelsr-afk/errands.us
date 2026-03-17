@@ -17,6 +17,7 @@ type Request = {
   assigned_to?: number;
   offered_amount?: number;
   pickup_flexibility?: string;
+  request_type?: string;
   created_at: string;
   message_count?: number;
   last_message?: string;
@@ -78,6 +79,7 @@ export default function Home() {
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [description, setDescription] = useState("");
+  const [requestType, setRequestType] = useState<'delivery' | 'task'>('delivery');
   const [showDetails, setShowDetails] = useState(false);
   
   // Merchant selection
@@ -265,6 +267,7 @@ export default function Home() {
         body: JSON.stringify({ 
           title,
           description: description || null,
+          request_type: requestType,
           customer_id: dbUserId,
           pickup_street: pickupStreet,
           pickup_city: pickupCity,
@@ -288,7 +291,7 @@ export default function Home() {
 
       if (res.ok) {
         const newRequest = await res.json();
-        setTitle(""); setDescription("");
+        setTitle(""); setDescription(""); setRequestType('delivery');
         setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip("");
         setDeliveryStreet(profileStreet); setDeliveryCity(profileCity);
         setDeliveryState(profileState); setDeliveryZip(profileZip);
@@ -503,6 +506,14 @@ export default function Home() {
           padding: 0; margin: 12px 0; display: block; text-align: center;
         }
         .address-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+        .request-type-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+        .type-btn {
+          flex: 1; padding: 14px 10px; border-radius: 12px; border: 2px solid #e0d8cc;
+          background: #faf8f4; color: #555; font-size: 0.88rem; font-weight: 500;
+          cursor: pointer; text-align: center; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+        }
+        .type-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
+        .type-btn-icon { font-size: 1.6rem; display: block; margin-bottom: 4px; }
         .address-tab {
           flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid #e0d8cc;
           background: #faf8f4; color: #555; font-size: 0.85rem; font-weight: 500;
@@ -582,20 +593,41 @@ export default function Home() {
           <div className="card">
             <div className="card-title">Post a Request</div>
             <form onSubmit={submit}>
+
+              {/* Request Type Toggle */}
+              <div className="request-type-toggle">
+                <button type="button" className={`type-btn ${requestType === 'delivery' ? 'active' : ''}`}
+                  onClick={() => setRequestType('delivery')}>
+                  <span className="type-btn-icon">📦</span>
+                  Delivery
+                  <div style={{fontSize: '0.75rem', marginTop: '3px', opacity: 0.8}}>Pick up & deliver something</div>
+                </button>
+                <button type="button" className={`type-btn ${requestType === 'task' ? 'active' : ''}`}
+                  onClick={() => setRequestType('task')}>
+                  <span className="type-btn-icon">🔧</span>
+                  Odd Job
+                  <div style={{fontSize: '0.75rem', marginTop: '3px', opacity: 0.8}}>Come help me with something</div>
+                </button>
+              </div>
+
               <div className="form-group">
-                <label className="label">What do you need? *</label>
-                <input className="input" placeholder="e.g. Pick up prescription from Walgreens"
+                <label className="label">{requestType === 'task' ? 'What do you need help with? *' : 'What do you need? *'}</label>
+                <input className="input"
+                  placeholder={requestType === 'task' ? 'e.g. Mow my lawn, Help me move furniture' : 'e.g. Pick up prescription from Walgreens'}
                   value={title} onChange={e => setTitle(e.target.value)} required />
               </div>
 
               <div className="form-group">
                 <label className="label">More details (optional)</label>
-                <textarea className="textarea" placeholder="Any extra info the runner should know — specific items, quantities, brand preferences, special instructions, etc."
+                <textarea className="textarea"
+                  placeholder={requestType === 'task'
+                    ? 'Describe the job — what needs to be done, any tools needed, how long it might take, etc.'
+                    : 'Any extra info the runner should know — specific items, quantities, brand preferences, etc.'}
                   value={description} onChange={e => setDescription(e.target.value)}
                   style={{minHeight: '70px'}} />
               </div>
 
-              <div className="section-label">Delivery Address</div>
+              <div className="section-label">{requestType === 'task' ? 'Job Location' : 'Delivery Address'}</div>
 
               {hasProfileAddress && (
                 <div className="address-toggle">
@@ -657,6 +689,8 @@ export default function Home() {
                 </div>
               )}
 
+              {requestType === 'delivery' && (
+                <>
               <div className="section-label">Pickup Location <span style={{fontFamily:'DM Sans,sans-serif', fontWeight:400, fontSize:'0.8rem', color:'#999'}}>(optional)</span></div>
 
               {activeZip.length === 5 && !territory && (
@@ -720,6 +754,8 @@ export default function Home() {
                   </div>
                 </>
               )}
+                </>
+              )} {/* end delivery-only section */}
 
               <div className="toggle-details" onClick={() => setShowDetails(!showDetails)}>
                 {showDetails ? "▼" : "▶"} Add timing, cost & payment details
@@ -839,8 +875,13 @@ export default function Home() {
                     <div key={r.id} className="req-item" onClick={() => router.push(`/request/${r.id}`)}>
                       <div className="req-top">
                         <div className="req-title">{r.title}</div>
-                        <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
-                          {statusInfo.label}
+                        <div style={{display:'flex', gap:'4px', alignItems:'center', flexShrink:0}}>
+                          {r.request_type === 'task' && (
+                            <span style={{fontSize:'0.7rem', background:'#e8f5e9', color:'#2d6a2d', padding:'2px 8px', borderRadius:'100px', fontWeight:600}}>🔧 Odd Job</span>
+                          )}
+                          <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
+                            {statusInfo.label}
+                          </div>
                         </div>
                       </div>
                       <div className="req-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
