@@ -1,4 +1,4 @@
-// app/admin/page.tsx - Complete with edit, delete, unassign
+// app/admin/page.tsx - Complete Admin Dashboard
 
 "use client";
 import { useEffect, useState } from "react";
@@ -14,9 +14,7 @@ type Territory = {
   owner_email?: string;
   status: string;
   price?: number;
-  time_slot_days?: string[];
-  time_slot_start?: string;
-  time_slot_end?: string;
+  time_slots?: string[];
 };
 
 type User = {
@@ -26,7 +24,23 @@ type User = {
   phone?: string;
   role: string;
   status: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   created_at: string;
+};
+
+type Request = {
+  id: number;
+  title: string;
+  status: string;
+  customer_name?: string;
+  runner_name?: string;
+  offered_amount?: number;
+  delivery_zip?: string;
+  created_at: string;
+  assigned_to?: number;
 };
 
 type Merchant = {
@@ -34,67 +48,50 @@ type Merchant = {
   name: string;
   category: string;
   address?: string;
+  zip?: string;
   status: string;
-  submitted_by: string;
+  submitted_by?: string;
+  creator_name?: string;
+  creator_email?: string;
 };
-
-const DAY_LABELS: Record<string, string> = {
-  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', 
-  fri: 'Fri', sat: 'Sat', sun: 'Sun'
-};
-
-const PRESET_SHIFTS = [
-  { label: '24/7', days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '23:59' },
-  { label: 'Weekdays', days: ['mon','tue','wed','thu','fri'], start: '00:00', end: '23:59' },
-  { label: 'Weekends', days: ['sat','sun'], start: '00:00', end: '23:59' },
-  { label: 'Morning (6am-2pm)', days: ['mon','tue','wed','thu','fri'], start: '06:00', end: '14:00' },
-  { label: 'Evening (2pm-10pm)', days: ['mon','tue','wed','thu','fri'], start: '14:00', end: '22:00' },
-  { label: 'Late Night (10pm-6am)', days: ['mon','tue','wed','thu','fri','sat','sun'], start: '22:00', end: '06:00' },
-];
 
 export default function AdminDashboard() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
-  
-  const [tab, setTab] = useState<"territories" | "users" | "merchants">("territories");
+
+  const [tab, setTab] = useState<"operations" | "territories" | "people" | "requests" | "merchants">("operations");
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [requests, setRequests] = useState<Request[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
-  
+  const [loadingData, setLoadingData] = useState(true);
+  const [expandedTerritory, setExpandedTerritory] = useState<number | null>(null);
+  const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
+  const [peopleFilter, setPeopleFilter] = useState<"all" | "runners" | "customers" | "owners" | "pending">("all");
+
+  // Territory form
   const [showTerritoryForm, setShowTerritoryForm] = useState(false);
   const [editingTerritoryId, setEditingTerritoryId] = useState<number | null>(null);
   const [newTerritoryName, setNewTerritoryName] = useState("");
   const [newTerritoryZips, setNewTerritoryZips] = useState("");
   const [newTerritoryPrice, setNewTerritoryPrice] = useState("");
-  const [newTimeDays, setNewTimeDays] = useState<string[]>(['mon','tue','wed','thu','fri','sat','sun']);
-  const [newTimeStart, setNewTimeStart] = useState("00:00");
-  const [newTimeEnd, setNewTimeEnd] = useState("23:59");
-  
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserPhone, setNewUserPhone] = useState("");
-  const [newUserRole, setNewUserRole] = useState("territory_owner");
-  
-  const [loadingData, setLoadingData] = useState(true);
-  const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
 
   useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
-      router.replace("/login");
-    }
+    if (!loading && (!user || !isAdmin)) router.replace("/login");
   }, [user, isAdmin, loading, router]);
 
   const loadData = async () => {
     setLoadingData(true);
     try {
-      const [terrRes, usersRes, merchRes] = await Promise.all([
+      const [terrRes, usersRes, reqRes, merchRes] = await Promise.all([
         fetch("/.netlify/functions/territories-get"),
-        fetch("/.netlify/functions/users-get-all"),
+        fetch("/.netlify/functions/users-get"),
+        fetch("/.netlify/functions/requests-get"),
         fetch("/.netlify/functions/merchants-get-all"),
       ]);
       if (terrRes.ok) setTerritories(await terrRes.json());
       if (usersRes.ok) setUsers(await usersRes.json());
+      if (reqRes.ok) setRequests(await reqRes.json());
       if (merchRes.ok) setMerchants(await merchRes.json());
     } catch (e) {
       console.error("Failed to load admin data:", e);
@@ -106,51 +103,12 @@ export default function AdminDashboard() {
     if (isAdmin) loadData();
   }, [isAdmin]);
 
-  const applyPreset = (preset: typeof PRESET_SHIFTS[0]) => {
-    setNewTimeDays(preset.days);
-    setNewTimeStart(preset.start);
-    setNewTimeEnd(preset.end);
-  };
-
-  const toggleDay = (day: string) => {
-    if (newTimeDays.includes(day)) {
-      setNewTimeDays(newTimeDays.filter(d => d !== day));
-    } else {
-      setNewTimeDays([...newTimeDays, day]);
-    }
-  };
-
-  const openAddTerritory = () => {
-    setEditingTerritoryId(null);
-    setNewTerritoryName("");
-    setNewTerritoryZips("");
-    setNewTerritoryPrice("");
-    setNewTimeDays(['mon','tue','wed','thu','fri','sat','sun']);
-    setNewTimeStart("00:00");
-    setNewTimeEnd("23:59");
-    setShowTerritoryForm(true);
-  };
-
-  const openEditTerritory = (t: Territory) => {
-    setEditingTerritoryId(t.id);
-    setNewTerritoryName(t.name);
-    setNewTerritoryZips(t.zip_codes?.join(", ") || "");
-    setNewTerritoryPrice(t.price ? t.price.toString() : "");
-    setNewTimeDays(t.time_slot_days || ['mon','tue','wed','thu','fri','sat','sun']);
-    setNewTimeStart(t.time_slot_start?.slice(0, 5) || "00:00");
-    setNewTimeEnd(t.time_slot_end?.slice(0, 5) || "23:59");
-    setShowTerritoryForm(true);
-  };
-
   const saveTerritory = async () => {
     if (!newTerritoryName.trim() || !newTerritoryZips.trim()) return;
-    
-    const zipArray = newTerritoryZips.split(",").map(z => z.trim());
-    
-    const endpoint = editingTerritoryId 
+    const zipArray = newTerritoryZips.split(",").map(z => z.trim()).filter(Boolean);
+    const endpoint = editingTerritoryId
       ? "/.netlify/functions/territories-update"
       : "/.netlify/functions/territories-create";
-    
     await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -159,33 +117,29 @@ export default function AdminDashboard() {
         name: newTerritoryName.trim(),
         zip_codes: zipArray,
         price: newTerritoryPrice ? parseFloat(newTerritoryPrice) : null,
-        status: editingTerritoryId ? undefined : "available",
-        time_slot_days: newTimeDays,
-        time_slot_start: newTimeStart + ":00",
-        time_slot_end: newTimeEnd + ":00",
+        status: editingTerritoryId ? undefined : "active",
+        time_slots: ["morning", "afternoon", "evening"],
       }),
     });
-    
     setShowTerritoryForm(false);
+    setNewTerritoryName(""); setNewTerritoryZips(""); setNewTerritoryPrice("");
+    setEditingTerritoryId(null);
     loadData();
   };
 
   const deleteTerritory = async (id: number, name: string) => {
-    if (!confirm(`Delete territory "${name}"? This cannot be undone.`)) return;
-    
+    if (!confirm(`Delete territory "${name}"?`)) return;
     await fetch("/.netlify/functions/territories-delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    
     loadData();
   };
 
   const assignTerritory = async (territoryId: number) => {
     const userId = selectedOwner[territoryId];
     if (!userId) return;
-
     await fetch("/.netlify/functions/territories-assign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -195,94 +149,105 @@ export default function AdminDashboard() {
     loadData();
   };
 
-  const unassignTerritory = async (territoryId: number, name: string) => {
-    if (!confirm(`Remove owner from "${name}" and make it available again?`)) return;
-    
+  const unassignTerritory = async (territoryId: number) => {
     await fetch("/.netlify/functions/territories-unassign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ territory_id: territoryId }),
     });
-    
     loadData();
   };
 
-  const createUser = async () => {
-    if (!newUserName || !newUserEmail) return;
-    
-    await fetch("/.netlify/functions/users-create-manual", {
+  const updateUserStatus = async (userId: number, status: string) => {
+    await fetch("/.netlify/functions/users-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        full_name: newUserName,
-        email: newUserEmail,
-        phone: newUserPhone,
-        role: newUserRole,
-      }),
-    });
-    
-    setNewUserName("");
-    setNewUserEmail("");
-    setNewUserPhone("");
-    setNewUserRole("territory_owner");
-    setShowAddUser(false);
-    loadData();
-  };
-
-  const approveUser = async (userId: number) => {
-    await fetch("/.netlify/functions/users-update-status", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, status: "active" }),
+      body: JSON.stringify({ id: userId, status }),
     });
     loadData();
   };
 
-  const suspendUser = async (userId: number) => {
-    await fetch("/.netlify/functions/users-update-status", {
+  const updateUserRole = async (userId: number, role: string) => {
+    await fetch("/.netlify/functions/users-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, status: "suspended" }),
+      body: JSON.stringify({ id: userId, role }),
     });
     loadData();
   };
 
-  const approveMerchant = async (merchantId: number) => {
-    await fetch("/.netlify/functions/merchants-moderate", {
+  const deleteUser = async (userId: number, name: string) => {
+    if (!confirm(`Delete user "${name}"? This cannot be undone.`)) return;
+    await fetch("/.netlify/functions/users-delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: merchantId, status: "approved" }),
+      body: JSON.stringify({ id: userId }),
     });
     loadData();
   };
 
-  const rejectMerchant = async (merchantId: number) => {
-    await fetch("/.netlify/functions/merchants-moderate", {
+  const deleteRequest = async (id: number) => {
+    if (!confirm("Delete this request?")) return;
+    await fetch("/.netlify/functions/requests-delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: merchantId, status: "rejected" }),
+      body: JSON.stringify({ id }),
     });
     loadData();
   };
 
-  const formatTimeSlot = (t: Territory) => {
-    if (!t.time_slot_days || !t.time_slot_start || !t.time_slot_end) return "24/7";
-    
-    const days = t.time_slot_days.map(d => DAY_LABELS[d]).join(', ');
-    const start = t.time_slot_start.slice(0, 5);
-    const end = t.time_slot_end.slice(0, 5);
-    
-    if (start === '00:00' && end === '23:59') return days;
-    return `${days} ${start}-${end}`;
+  const approveMerchant = async (id: number) => {
+    await fetch("/.netlify/functions/merchants-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: "approved" }),
+    });
+    loadData();
+  };
+
+  const deleteMerchant = async (id: number, name: string) => {
+    if (!confirm(`Delete merchant "${name}"?`)) return;
+    await fetch("/.netlify/functions/merchants-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    loadData();
   };
 
   if (loading || !isAdmin) return null;
 
-  const pendingOwners = users.filter(u => u.role === "territory_owner" && u.status === "pending");
-  const activeOwners = users.filter(u => u.role === "territory_owner" && u.status === "active");
-  const availableTerritories = territories.filter(t => t.status === "available");
-  const soldTerritories = territories.filter(t => t.status === "sold");
-  const pendingMerchants = merchants.filter(m => m.status === "pending");
+  // Computed stats
+  const openRequests = requests.filter(r => r.status === 'open');
+  const inProgressRequests = requests.filter(r => r.status === 'accepted');
+  const uncoveredRequests = openRequests.filter(r => {
+    const age = (Date.now() - new Date(r.created_at).getTime()) / 1000 / 60;
+    return age > 60; // older than 1 hour
+  });
+  const pendingMerchants = merchants.filter(m => m.status === 'pending');
+  const pendingOwners = users.filter(u => u.role === 'territory_owner' && u.status === 'pending');
+  const runners = users.filter(u => u.role === 'runner' || u.role === 'independent_driver');
+  const customers = users.filter(u => u.role === 'customer');
+  const owners = users.filter(u => u.role === 'territory_owner');
+  const activeOwners = owners.filter(u => u.status === 'active');
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const newSignupsToday = users.filter(u => new Date(u.created_at) >= today).length;
+  const newRequestsToday = requests.filter(r => new Date(r.created_at) >= today).length;
+
+  const filteredPeople = users.filter(u => {
+    if (peopleFilter === 'all') return true;
+    if (peopleFilter === 'runners') return u.role === 'runner' || u.role === 'independent_driver';
+    if (peopleFilter === 'customers') return u.role === 'customer';
+    if (peopleFilter === 'owners') return u.role === 'territory_owner';
+    if (peopleFilter === 'pending') return u.status === 'pending';
+    return true;
+  });
+
+  const getRunnersInZip = (zips: string[]) => {
+    return runners.filter(r => r.zip && zips.includes(r.zip));
+  };
 
   return (
     <>
@@ -290,438 +255,488 @@ export default function AdminDashboard() {
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=DM+Sans:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f5f0e8; min-height: 100vh; font-family: 'DM Sans', sans-serif; }
-        .page { max-width: 1200px; margin: 0 auto; padding: 32px 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+        .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 80px; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
         .logo { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
         .logo span { color: #7ab87a; }
-        .admin-badge { background: #2d4a2d; color: #f5f0e8; padding: 6px 14px; border-radius: 100px; font-size: 0.8rem; font-weight: 500; }
-        
-        .quick-links {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 24px;
-        }
-        .quick-link {
-          flex: 1;
-          padding: 14px 20px;
-          background: #fff;
-          border: 1.5px solid #e0d8cc;
-          border-radius: 12px;
-          text-align: center;
-          text-decoration: none;
-          color: #2d4a2d;
-          font-size: 0.9rem;
-          font-weight: 500;
-          transition: all 0.2s;
-          box-shadow: 0 2px 8px rgba(45,74,45,0.05);
-        }
-        .quick-link:hover {
-          border-color: #7ab87a;
-          background: #f0f7f0;
-          transform: translateY(-2px);
-        }
-        
-        .stats {
-          display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 16px; margin-bottom: 32px;
-        }
-        .stat-card {
-          background: #fff; padding: 20px; border-radius: 14px;
-          box-shadow: 0 2px 12px rgba(45,74,45,0.06);
-          border: 1px solid rgba(45,74,45,0.05);
-        }
-        .stat-label { font-size: 0.8rem; color: #999; margin-bottom: 6px; }
-        .stat-value { font-family: 'Fraunces', serif; font-size: 2rem; color: #2d4a2d; font-weight: 700; }
+        .header-right { display: flex; gap: 10px; align-items: center; }
+        .back-btn { background: #f5f0e8; border: 1.5px solid #e0d8cc; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; color: #2d4a2d; font-weight: 500; font-family: 'DM Sans', sans-serif; }
 
-        .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid #e0d8cc; }
-        .tab {
-          padding: 12px 20px; background: none; border: none;
-          font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
-          font-weight: 500; color: #666; cursor: pointer;
-          border-bottom: 3px solid transparent;
-          transition: all 0.2s; margin-bottom: -2px;
+        .ops-bar {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 24px;
         }
+        .ops-card {
+          background: #fff; border-radius: 12px; padding: 16px;
+          box-shadow: 0 2px 8px rgba(45,74,45,0.06);
+          border-left: 4px solid #e0d8cc;
+        }
+        .ops-card.alert { border-left-color: #dc3545; }
+        .ops-card.good { border-left-color: #7ab87a; }
+        .ops-card.info { border-left-color: #2d4a2d; }
+        .ops-label { font-size: 0.72rem; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .ops-value { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 700; color: #2d4a2d; }
+        .ops-sub { font-size: 0.75rem; color: #aaa; margin-top: 2px; }
+
+        .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid #e0d8cc; overflow-x: auto; }
+        .tab { padding: 10px 18px; background: none; border: none; font-size: 0.88rem; font-weight: 500; color: #888; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; margin-bottom: -2px; white-space: nowrap; font-family: 'DM Sans', sans-serif; }
         .tab.active { color: #2d4a2d; border-bottom-color: #7ab87a; }
-        .tab:hover:not(.active) { color: #2d4a2d; }
 
-        .section-head {
-          font-family: 'Fraunces', serif; font-size: 1.2rem;
-          color: #2d4a2d; margin: 28px 0 14px;
-          display: flex; align-items: center; justify-content: space-between;
-        }
-        .btn {
-          padding: 9px 16px; border-radius: 10px; border: none;
-          font-family: 'DM Sans', sans-serif; font-size: 0.88rem;
-          font-weight: 500; cursor: pointer; transition: all 0.2s;
-        }
+        .section-head { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 14px; }
+        .section-title { font-family: 'Fraunces', serif; font-size: 1.1rem; color: #2d4a2d; font-weight: 600; }
+
+        .card { background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(45,74,45,0.06); border: 1px solid #f0ebe0; }
+        .card.expanded { border-color: #7ab87a; }
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; cursor: pointer; }
+        .card-title { font-weight: 700; font-size: 0.98rem; color: #1a1a1a; margin-bottom: 4px; }
+        .card-meta { font-size: 0.82rem; color: #888; }
+        .card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+
+        .expanded-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0ebe0; }
+        .expanded-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 10px; }
+
+        .person-card { background: #f5f0e8; border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+        .person-name { font-weight: 600; font-size: 0.9rem; color: #2d4a2d; margin-bottom: 3px; }
+        .person-detail { font-size: 0.8rem; color: #666; margin-bottom: 2px; }
+
+        .btn { padding: 7px 14px; border-radius: 8px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
         .btn-primary { background: #2d4a2d; color: #f5f0e8; }
         .btn-primary:hover { background: #3d6b3d; }
         .btn-success { background: #7ab87a; color: #fff; }
         .btn-success:hover { background: #5fa05f; }
         .btn-danger { background: #dc3545; color: #fff; }
         .btn-danger:hover { background: #c82333; }
-        .btn-secondary { background: #f5f0e8; color: #555; border: 1.5px solid #e0d8cc; }
+        .btn-secondary { background: #f5f0e8; color: #555; border: 1px solid #e0d8cc; }
         .btn-secondary:hover { background: #e8e0d4; }
-        .btn-ghost { background: #faf8f4; color: #666; font-size: 0.8rem; padding: 6px 12px; }
-        .btn-ghost:hover { background: #f0f0e8; }
-        .btn-small { padding: 6px 10px; font-size: 0.8rem; }
+        .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-        .card {
-          background: #fff; border-radius: 14px; padding: 20px;
-          margin-bottom: 12px;
-          box-shadow: 0 2px 10px rgba(45,74,45,0.06);
-          border: 1px solid rgba(45,74,45,0.05);
-        }
-        .card-title { font-weight: 600; font-size: 1rem; color: #1a1a1a; margin-bottom: 8px; }
-        .card-meta { font-size: 0.85rem; color: #999; margin-bottom: 12px; }
-        .card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-        .form-card {
-          background: #fff; border-radius: 14px; padding: 24px;
-          margin-bottom: 20px;
-          box-shadow: 0 4px 20px rgba(45,74,45,0.1);
-          border: 1px solid rgba(45,74,45,0.07);
-        }
-        .input {
-          display: block; width: 100%; padding: 11px 14px; margin-bottom: 12px;
-          border: 1.5px solid #e0d8cc; border-radius: 11px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.93rem;
-          background: #faf8f4; color: #1a1a1a; outline: none;
-        }
-        .input:focus { border-color: #7ab87a; background: #fff; }
-        
-        .label { font-size: 0.88rem; font-weight: 500; color: #555; margin: 14px 0 8px; display: block; }
-        
-        .preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
-        .day-toggle { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-        .day-btn {
-          padding: 8px 14px; border-radius: 8px; border: 1.5px solid #e0d8cc;
-          background: #faf8f4; cursor: pointer; font-size: 0.85rem;
-          font-family: 'DM Sans', sans-serif; font-weight: 500;
-          transition: all 0.2s; color: #666;
-        }
-        .day-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
-        .day-btn:hover:not(.active) { border-color: #7ab87a; }
-        
-        .time-row { display: flex; gap: 10px; align-items: center; }
-        .time-row .input { margin-bottom: 0; flex: 1; }
-
-        .badge {
-          display: inline-block; padding: 3px 10px; border-radius: 100px;
-          font-size: 0.75rem; font-weight: 500;
-        }
-        .badge-available { background: #d4f0d4; color: #2d6a2d; }
-        .badge-sold { background: #fdf3cc; color: #7a5c00; }
-        .badge-pending { background: #fff0e6; color: #c67700; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 0.72rem; font-weight: 600; margin-left: 6px; }
         .badge-active { background: #d4f0d4; color: #2d6a2d; }
+        .badge-pending { background: #fff0e6; color: #c67700; }
         .badge-suspended { background: #ffe0e0; color: #c00; }
-        .timeslot-badge { background: #e6f0ff; color: #0056b3; margin-left: 8px; }
+        .badge-open { background: #d4f0d4; color: #2d6a2d; }
+        .badge-accepted { background: #fdf3cc; color: #7a5c00; }
+        .badge-completed { background: #e8e8e8; color: #555; }
+        .badge-approved { background: #d4f0d4; color: #2d6a2d; }
+        .badge-alert { background: #ffe0e0; color: #c00; }
 
-        select.input { cursor: pointer; }
+        .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid #e0d8cc; background: #faf8f4; color: #555; font-size: 0.82rem; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+        .filter-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
+
+        .input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1.5px solid #e0d8cc; border-radius: 8px; font-size: 0.9rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; outline: none; }
+        .input:focus { border-color: #7ab87a; background: #fff; }
+        .form-card { background: #fff; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(45,74,45,0.1); border: 1px solid #e0d8cc; }
+
         .empty { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
+        .alert-banner { background: #ffe0e0; border: 1px solid #ffaaaa; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.88rem; color: #c00; display: flex; align-items: center; gap: 8px; }
+
+        .role-select { padding: 4px 8px; border: 1px solid #e0d8cc; border-radius: 6px; font-size: 0.78rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; cursor: pointer; }
+
+        @media (max-width: 600px) {
+          .ops-bar { grid-template-columns: repeat(2, 1fr); }
+        }
       `}</style>
 
       <div className="page">
         <div className="header">
           <div>
             <div className="logo">errand<span>s</span></div>
-            <div style={{ color: "#999", fontSize: "0.9rem", marginTop: 4 }}>Admin Dashboard</div>
+            <div style={{color: '#999', fontSize: '0.85rem', marginTop: '2px'}}>Admin Dashboard</div>
           </div>
-          <div className="admin-badge">👤 {user?.user_metadata?.full_name || user?.email}</div>
-        </div>
-
-        <div className="quick-links">
-          <a href="/admin/merchants" className="quick-link">
-            🏪 Manage Merchants
-          </a>
-          <a href="/admin/users" className="quick-link">
-            👥 Manage Users
-          </a>
-        </div>
-
-        <div className="stats">
-          <div className="stat-card">
-            <div className="stat-label">Total Territories</div>
-            <div className="stat-value">{territories.length}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Available</div>
-            <div className="stat-value">{availableTerritories.length}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Sold</div>
-            <div className="stat-value">{soldTerritories.length}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Pending Approvals</div>
-            <div className="stat-value">{pendingOwners.length + pendingMerchants.length}</div>
+          <div className="header-right">
+            <button className="back-btn" onClick={() => router.push('/')}>← Home</button>
           </div>
         </div>
 
+        {/* Operations Bar */}
+        <div className="ops-bar">
+          <div className={`ops-card ${openRequests.length > 0 ? 'info' : 'good'}`}>
+            <div className="ops-label">Open Requests</div>
+            <div className="ops-value">{openRequests.length}</div>
+            <div className="ops-sub">awaiting runner</div>
+          </div>
+          <div className={`ops-card ${inProgressRequests.length > 0 ? 'good' : ''}`}>
+            <div className="ops-label">In Progress</div>
+            <div className="ops-value">{inProgressRequests.length}</div>
+            <div className="ops-sub">being delivered</div>
+          </div>
+          <div className={`ops-card ${uncoveredRequests.length > 0 ? 'alert' : 'good'}`}>
+            <div className="ops-label">Uncovered 1hr+</div>
+            <div className="ops-value">{uncoveredRequests.length}</div>
+            <div className="ops-sub">need attention</div>
+          </div>
+          <div className="ops-card good">
+            <div className="ops-label">New Signups Today</div>
+            <div className="ops-value">{newSignupsToday}</div>
+            <div className="ops-sub">{users.length} total users</div>
+          </div>
+          <div className="ops-card info">
+            <div className="ops-label">Requests Today</div>
+            <div className="ops-value">{newRequestsToday}</div>
+            <div className="ops-sub">{requests.length} total</div>
+          </div>
+          <div className={`ops-card ${pendingMerchants.length > 0 || pendingOwners.length > 0 ? 'alert' : 'good'}`}>
+            <div className="ops-label">Pending Approvals</div>
+            <div className="ops-value">{pendingMerchants.length + pendingOwners.length}</div>
+            <div className="ops-sub">{pendingOwners.length} owners, {pendingMerchants.length} merchants</div>
+          </div>
+        </div>
+
+        {/* Alert for uncovered requests */}
+        {uncoveredRequests.length > 0 && (
+          <div className="alert-banner">
+            ⚠️ {uncoveredRequests.length} request{uncoveredRequests.length !== 1 ? 's have' : ' has'} been open for over an hour with no runner assigned.
+          </div>
+        )}
+
+        {/* Tabs */}
         <div className="tabs">
-          <button className={`tab ${tab === "territories" ? "active" : ""}`} onClick={() => setTab("territories")}>
-            Territories
+          <button className={`tab ${tab === 'operations' ? 'active' : ''}`} onClick={() => setTab('operations')}>
+            🏠 Overview
           </button>
-          <button className={`tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
-            Users {pendingOwners.length > 0 && `(${pendingOwners.length})`}
+          <button className={`tab ${tab === 'territories' ? 'active' : ''}`} onClick={() => setTab('territories')}>
+            📍 Territories ({territories.length})
           </button>
-          <button className={`tab ${tab === "merchants" ? "active" : ""}`} onClick={() => setTab("merchants")}>
-            Merchants {pendingMerchants.length > 0 && `(${pendingMerchants.length})`}
+          <button className={`tab ${tab === 'people' ? 'active' : ''}`} onClick={() => setTab('people')}>
+            👥 People ({users.length})
+            {pendingOwners.length > 0 && <span style={{color: '#dc3545', marginLeft: '4px'}}>●</span>}
+          </button>
+          <button className={`tab ${tab === 'requests' ? 'active' : ''}`} onClick={() => setTab('requests')}>
+            📦 Requests ({requests.length})
+          </button>
+          <button className={`tab ${tab === 'merchants' ? 'active' : ''}`} onClick={() => setTab('merchants')}>
+            🏪 Merchants ({merchants.length})
+            {pendingMerchants.length > 0 && <span style={{color: '#dc3545', marginLeft: '4px'}}>●</span>}
           </button>
         </div>
 
-        {tab === "territories" && (
+        {/* OVERVIEW TAB */}
+        {tab === 'operations' && (
           <>
             <div className="section-head">
-              <span>Territories</span>
-              <button className="btn btn-primary" onClick={openAddTerritory}>
-                + Create Territory
-              </button>
+              <div className="section-title">Active Requests</div>
+            </div>
+            {openRequests.length === 0 && inProgressRequests.length === 0 ? (
+              <div className="empty">No active requests right now.</div>
+            ) : (
+              [...openRequests, ...inProgressRequests].slice(0, 10).map(r => (
+                <div key={r.id} className="card">
+                  <div className="card-top" onClick={() => router.push(`/request/${r.id}`)}>
+                    <div>
+                      <div className="card-title">{r.title}</div>
+                      <div className="card-meta">
+                        {r.customer_name && `👤 ${r.customer_name} • `}
+                        {r.offered_amount && `$${r.offered_amount} • `}
+                        {r.delivery_zip && `ZIP ${r.delivery_zip} • `}
+                        {new Date(r.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      </div>
+                    </div>
+                    <span className={`badge badge-${r.status}`}>{r.status}</span>
+                  </div>
+                </div>
+              ))
+            )}
+
+            <div className="section-head" style={{marginTop: '28px'}}>
+              <div className="section-title">Coverage by Territory</div>
+            </div>
+            {territories.map(t => {
+              const runnersHere = getRunnersInZip(t.zip_codes || []);
+              const requestsHere = openRequests.filter(r => r.delivery_zip && t.zip_codes?.includes(r.delivery_zip));
+              return (
+                <div key={t.id} className="card">
+                  <div className="card-title">{t.name}</div>
+                  <div className="card-meta">
+                    ZIPs: {t.zip_codes?.join(', ')} •
+                    {t.owner_name ? ` Owner: ${t.owner_name}` : ' No owner'} •
+                    {runnersHere.length} runner{runnersHere.length !== 1 ? 's' : ''} •
+                    {requestsHere.length} open request{requestsHere.length !== 1 ? 's' : ''}
+                    {requestsHere.length > 0 && runnersHere.length === 0 && (
+                      <span className="badge badge-alert" style={{marginLeft: '8px'}}>⚠️ No coverage</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {/* TERRITORIES TAB */}
+        {tab === 'territories' && (
+          <>
+            <div className="section-head">
+              <div className="section-title">All Territories</div>
+              <button className="btn btn-primary" onClick={() => {
+                setEditingTerritoryId(null);
+                setNewTerritoryName(""); setNewTerritoryZips(""); setNewTerritoryPrice("");
+                setShowTerritoryForm(true);
+              }}>+ New Territory</button>
             </div>
 
             {showTerritoryForm && (
               <div className="form-card">
-                <div style={{fontSize: '1.1rem', fontWeight: 600, marginBottom: 16, color: '#2d4a2d'}}>
-                  {editingTerritoryId ? "Edit Territory" : "Create Territory"}
+                <div style={{fontWeight: 700, marginBottom: '14px', color: '#2d4a2d'}}>
+                  {editingTerritoryId ? 'Edit Territory' : 'Create Territory'}
                 </div>
-                <input
-                  className="input"
-                  placeholder="Territory name (e.g. Downtown LA - Evening Shift)"
-                  value={newTerritoryName}
-                  onChange={e => setNewTerritoryName(e.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Zip codes (comma-separated: 90210, 90211)"
-                  value={newTerritoryZips}
-                  onChange={e => setNewTerritoryZips(e.target.value)}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  placeholder="Price (optional)"
-                  value={newTerritoryPrice}
-                  onChange={e => setNewTerritoryPrice(e.target.value)}
-                />
-                
-                <div className="label">Time Slot Presets</div>
-                <div className="preset-grid">
-                  {PRESET_SHIFTS.map(preset => (
-                    <button
-                      key={preset.label}
-                      className="btn btn-ghost"
-                      onClick={() => applyPreset(preset)}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="label">Days Active</div>
-                <div className="day-toggle">
-                  {['mon','tue','wed','thu','fri','sat','sun'].map(day => (
-                    <button
-                      key={day}
-                      className={`day-btn ${newTimeDays.includes(day) ? 'active' : ''}`}
-                      onClick={() => toggleDay(day)}
-                    >
-                      {DAY_LABELS[day]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="label">Time Range</div>
-                <div className="time-row">
-                  <input
-                    className="input"
-                    type="time"
-                    value={newTimeStart}
-                    onChange={e => setNewTimeStart(e.target.value)}
-                  />
-                  <span>to</span>
-                  <input
-                    className="input"
-                    type="time"
-                    value={newTimeEnd}
-                    onChange={e => setNewTimeEnd(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <input className="input" placeholder="Territory name (e.g. Oconto - 54153)" value={newTerritoryName} onChange={e => setNewTerritoryName(e.target.value)} />
+                <input className="input" placeholder="ZIP codes, comma separated (e.g. 54153, 54154)" value={newTerritoryZips} onChange={e => setNewTerritoryZips(e.target.value)} />
+                <input className="input" type="number" placeholder="Monthly price (optional)" value={newTerritoryPrice} onChange={e => setNewTerritoryPrice(e.target.value)} />
+                <div style={{display: 'flex', gap: '8px'}}>
                   <button className="btn btn-primary" onClick={saveTerritory}>
-                    {editingTerritoryId ? "Save Changes" : "Create"}
+                    {editingTerritoryId ? 'Save Changes' : 'Create'}
                   </button>
                   <button className="btn btn-secondary" onClick={() => setShowTerritoryForm(false)}>Cancel</button>
                 </div>
               </div>
             )}
 
-            {loadingData ? (
-              <div className="empty">Loading...</div>
-            ) : territories.length === 0 ? (
-              <div className="empty">No territories yet. Create your first one!</div>
-            ) : (
-              territories.map(t => (
-                <div key={t.id} className="card">
-                  <div className="card-title">
-                    {t.name} 
-                    <span className={`badge badge-${t.status}`}>{t.status}</span>
-                    <span className="badge timeslot-badge">⏰ {formatTimeSlot(t)}</span>
+            {loadingData ? <div className="empty">Loading...</div> : territories.length === 0 ? (
+              <div className="empty">No territories yet.</div>
+            ) : territories.map(t => {
+              const isExpanded = expandedTerritory === t.id;
+              const runnersHere = getRunnersInZip(t.zip_codes || []);
+              const owner = users.find(u => u.id === t.owner_id);
+
+              return (
+                <div key={t.id} className={`card ${isExpanded ? 'expanded' : ''}`}>
+                  <div className="card-top" onClick={() => setExpandedTerritory(isExpanded ? null : t.id)}>
+                    <div style={{flex: 1}}>
+                      <div className="card-title">
+                        {t.name}
+                        <span className={`badge badge-${t.status === 'active' ? 'active' : 'pending'}`}>{t.status}</span>
+                      </div>
+                      <div className="card-meta">
+                        ZIPs: {t.zip_codes?.join(', ')} •
+                        {owner ? ` Owner: ${owner.full_name}` : ' No owner assigned'} •
+                        {runnersHere.length} runner{runnersHere.length !== 1 ? 's' : ''}
+                        {t.price && ` • $${t.price}/mo`}
+                      </div>
+                    </div>
+                    <span style={{color: '#aaa', fontSize: '0.8rem'}}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
-                  <div className="card-meta">
-                    Zip codes: {t.zip_codes?.join(", ") || "None"}
-                    {t.price && ` • $${t.price}`}
-                    {t.owner_name && ` • Owner: ${t.owner_name} (${t.owner_email})`}
-                  </div>
-                  <div className="card-actions">
-                    {t.status === "available" && activeOwners.length > 0 && (
-                      <>
-                        <select 
-                          className="input" 
-                          style={{ width: "auto", marginBottom: 0, flex: 1 }}
-                          value={selectedOwner[t.id] || ""}
-                          onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}
-                        >
-                          <option value="">Assign to...</option>
-                          {activeOwners.map(u => (
-                            <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
-                          ))}
-                        </select>
-                        <button 
-                          className="btn btn-success btn-small"
-                          onClick={() => assignTerritory(t.id)}
-                          disabled={!selectedOwner[t.id]}
-                        >
-                          Assign
-                        </button>
-                      </>
-                    )}
-                    {t.status === "sold" && (
-                      <button 
-                        className="btn btn-danger btn-small"
-                        onClick={() => unassignTerritory(t.id, t.name)}
-                      >
-                        Remove Owner
-                      </button>
-                    )}
-                    <button className="btn btn-secondary btn-small" onClick={() => openEditTerritory(t)}>
-                      Edit
-                    </button>
-                    <button className="btn btn-danger btn-small" onClick={() => deleteTerritory(t.id, t.name)}>
-                      Delete
-                    </button>
-                  </div>
+
+                  {isExpanded && (
+                    <>
+                      {/* Owner details */}
+                      <div className="expanded-section">
+                        <div className="expanded-title">Territory Owner</div>
+                        {owner ? (
+                          <div className="person-card">
+                            <div className="person-name">{owner.full_name}</div>
+                            <div className="person-detail">📧 {owner.email}</div>
+                            {owner.phone && <div className="person-detail">📞 {owner.phone}</div>}
+                            {owner.street && <div className="person-detail">📍 {owner.street}, {owner.city}, {owner.state} {owner.zip}</div>}
+                            <div style={{marginTop: '8px', display: 'flex', gap: '8px'}}>
+                              <button className="btn btn-danger btn-sm" onClick={() => unassignTerritory(t.id)}>Remove Owner</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{marginBottom: '10px'}}>
+                            <div style={{fontSize: '0.85rem', color: '#888', marginBottom: '8px'}}>No owner assigned</div>
+                            {activeOwners.length > 0 && (
+                              <div style={{display: 'flex', gap: '8px'}}>
+                                <select className="input" style={{marginBottom: 0, flex: 1}}
+                                  value={selectedOwner[t.id] || ""}
+                                  onChange={e => setSelectedOwner({...selectedOwner, [t.id]: e.target.value})}>
+                                  <option value="">Select owner...</option>
+                                  {activeOwners.map(u => (
+                                    <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                                  ))}
+                                </select>
+                                <button className="btn btn-success" onClick={() => assignTerritory(t.id)} disabled={!selectedOwner[t.id]}>
+                                  Assign
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Runners */}
+                      <div className="expanded-section">
+                        <div className="expanded-title">Runners in this territory ({runnersHere.length})</div>
+                        {runnersHere.length === 0 ? (
+                          <div style={{fontSize: '0.85rem', color: '#bbb'}}>No runners with a ZIP code matching this territory</div>
+                        ) : runnersHere.map(r => (
+                          <div key={r.id} className="person-card">
+                            <div className="person-name">{r.full_name}</div>
+                            <div className="person-detail">📧 {r.email}</div>
+                            {r.phone && <div className="person-detail">📞 {r.phone}</div>}
+                            {r.street && <div className="person-detail">📍 {r.street}, {r.city}, {r.state} {r.zip}</div>}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Territory actions */}
+                      <div className="card-actions">
+                        <button className="btn btn-secondary btn-sm" onClick={() => {
+                          setEditingTerritoryId(t.id);
+                          setNewTerritoryName(t.name);
+                          setNewTerritoryZips(t.zip_codes?.join(', ') || '');
+                          setNewTerritoryPrice(t.price?.toString() || '');
+                          setShowTerritoryForm(true);
+                          setExpandedTerritory(null);
+                        }}>✏️ Edit</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteTerritory(t.id, t.name)}>🗑️ Delete</button>
+                      </div>
+                    </>
+                  )}
                 </div>
-              ))
-            )}
+              );
+            })}
           </>
         )}
 
-        {tab === "users" && (
+        {/* PEOPLE TAB */}
+        {tab === 'people' && (
           <>
             <div className="section-head">
-              <span>All Users</span>
-              <button className="btn btn-primary" onClick={() => setShowAddUser(!showAddUser)}>
-                + Add User
-              </button>
+              <div className="section-title">All Users</div>
+              <div style={{fontSize: '0.82rem', color: '#888'}}>
+                {runners.length} runners • {customers.length} customers • {owners.length} owners
+              </div>
             </div>
 
-            {showAddUser && (
-              <div className="form-card">
-                <input
-                  className="input"
-                  placeholder="Full Name"
-                  value={newUserName}
-                  onChange={e => setNewUserName(e.target.value)}
-                />
-                <input
-                  className="input"
-                  type="email"
-                  placeholder="Email"
-                  value={newUserEmail}
-                  onChange={e => setNewUserEmail(e.target.value)}
-                />
-                <input
-                  className="input"
-                  placeholder="Phone (optional)"
-                  value={newUserPhone}
-                  onChange={e => setNewUserPhone(e.target.value)}
-                />
-                <select 
-                  className="input"
-                  value={newUserRole}
-                  onChange={e => setNewUserRole(e.target.value)}
-                >
-                  <option value="territory_owner">Territory Owner</option>
-                  <option value="customer">Customer</option>
-                  <option value="admin">Admin</option>
-                </select>
-                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                  <button className="btn btn-primary" onClick={createUser}>Create User</button>
-                  <button className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
+            <div className="filter-row">
+              {[
+                { key: 'all', label: `All (${users.length})` },
+                { key: 'runners', label: `Runners (${runners.length})` },
+                { key: 'customers', label: `Customers (${customers.length})` },
+                { key: 'owners', label: `Owners (${owners.length})` },
+                { key: 'pending', label: `Pending (${users.filter(u => u.status === 'pending').length})` },
+              ].map(f => (
+                <button key={f.key} className={`filter-btn ${peopleFilter === f.key ? 'active' : ''}`}
+                  onClick={() => setPeopleFilter(f.key as any)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
 
-            {pendingOwners.length > 0 && (
-              <>
-                <div className="section-head">Pending Territory Owner Applications</div>
-                {pendingOwners.map(u => (
-                  <div key={u.id} className="card">
-                    <div className="card-title">{u.full_name}</div>
-                    <div className="card-meta">
-                      {u.email} • {u.phone} • Applied {new Date(u.created_at).toLocaleDateString()}
+            {filteredPeople.length === 0 ? (
+              <div className="empty">No users in this category.</div>
+            ) : filteredPeople.map(u => (
+              <div key={u.id} className="card">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px'}}>
+                  <div style={{flex: 1}}>
+                    <div className="card-title">
+                      {u.full_name || '(No name)'}
+                      <span className={`badge badge-${u.status}`}>{u.status}</span>
+                      <span className="badge" style={{background: '#f0f0f0', color: '#555'}}>{u.role}</span>
                     </div>
-                    <div className="card-actions">
-                      <button className="btn btn-success btn-small" onClick={() => approveUser(u.id)}>Approve</button>
-                      <button className="btn btn-danger btn-small" onClick={() => suspendUser(u.id)}>Reject</button>
+                    <div className="card-meta" style={{marginTop: '4px'}}>
+                      📧 {u.email}
+                      {u.phone && ` • 📞 ${u.phone}`}
+                    </div>
+                    {u.street && (
+                      <div className="card-meta" style={{marginTop: '2px'}}>
+                        📍 {u.street}, {u.city}, {u.state} {u.zip}
+                      </div>
+                    )}
+                    <div className="card-meta" style={{marginTop: '2px'}}>
+                      Joined {new Date(u.created_at).toLocaleDateString()}
                     </div>
                   </div>
-                ))}
-              </>
-            )}
-
-            {users.map(u => (
-              <div key={u.id} className="card">
-                <div className="card-title">
-                  {u.full_name} <span className={`badge badge-${u.status}`}>{u.status}</span>
                 </div>
-                <div className="card-meta">
-                  {u.role} • {u.email} • Joined {new Date(u.created_at).toLocaleDateString()}
+                <div className="card-actions">
+                  {u.status === 'pending' && (
+                    <button className="btn btn-success btn-sm" onClick={() => updateUserStatus(u.id, 'active')}>✅ Approve</button>
+                  )}
+                  {u.status === 'active' && (
+                    <button className="btn btn-danger btn-sm" onClick={() => updateUserStatus(u.id, 'suspended')}>🚫 Suspend</button>
+                  )}
+                  {u.status === 'suspended' && (
+                    <button className="btn btn-success btn-sm" onClick={() => updateUserStatus(u.id, 'active')}>✅ Reactivate</button>
+                  )}
+                  <select className="role-select" value={u.role}
+                    onChange={e => { if (confirm(`Change ${u.full_name}'s role to ${e.target.value}?`)) updateUserRole(u.id, e.target.value); }}>
+                    <option value="customer">customer</option>
+                    <option value="runner">runner</option>
+                    <option value="territory_owner">territory_owner</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteUser(u.id, u.full_name)}>🗑️ Delete</button>
                 </div>
               </div>
             ))}
           </>
         )}
 
-        {tab === "merchants" && (
+        {/* REQUESTS TAB */}
+        {tab === 'requests' && (
+          <>
+            <div className="section-head">
+              <div className="section-title">All Requests</div>
+            </div>
+            {requests.length === 0 ? (
+              <div className="empty">No requests yet.</div>
+            ) : requests.slice(0, 50).map(r => (
+              <div key={r.id} className="card">
+                <div className="card-top" onClick={() => router.push(`/request/${r.id}`)}>
+                  <div style={{flex: 1}}>
+                    <div className="card-title">{r.title}</div>
+                    <div className="card-meta">
+                      {r.customer_name && `👤 ${r.customer_name}`}
+                      {r.runner_name && ` • 🏃 ${r.runner_name}`}
+                      {r.offered_amount && ` • $${r.offered_amount}`}
+                      {r.delivery_zip && ` • ZIP ${r.delivery_zip}`}
+                      {` • ${new Date(r.created_at).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <span className={`badge badge-${r.status}`}>{r.status}</span>
+                </div>
+                <div className="card-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => router.push(`/request/${r.id}`)}>💬 View</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteRequest(r.id)}>🗑️ Delete</button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* MERCHANTS TAB */}
+        {tab === 'merchants' && (
           <>
             {pendingMerchants.length > 0 && (
               <>
-                <div className="section-head">Pending Merchant Submissions</div>
+                <div className="section-head">
+                  <div className="section-title">⏳ Pending Approval ({pendingMerchants.length})</div>
+                </div>
                 {pendingMerchants.map(m => (
-                  <div key={m.id} className="card">
+                  <div key={m.id} className="card" style={{borderLeft: '4px solid #ffc107'}}>
                     <div className="card-title">{m.name}</div>
                     <div className="card-meta">
-                      {m.category} • {m.address} • Submitted by {m.submitted_by}
+                      {m.category} • {m.address} • {m.zip}
+                      {m.creator_name && ` • Added by ${m.creator_name}`}
                     </div>
                     <div className="card-actions">
-                      <button className="btn btn-success btn-small" onClick={() => approveMerchant(m.id)}>Approve</button>
-                      <button className="btn btn-danger btn-small" onClick={() => rejectMerchant(m.id)}>Reject</button>
+                      <button className="btn btn-success btn-sm" onClick={() => approveMerchant(m.id)}>✅ Approve</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => deleteMerchant(m.id, m.name)}>🗑️ Reject & Delete</button>
                     </div>
                   </div>
                 ))}
               </>
             )}
 
-            <div className="section-head">All Merchants</div>
-            {merchants.filter(m => m.status !== "pending").map(m => (
+            <div className="section-head">
+              <div className="section-title">All Merchants ({merchants.filter(m => m.status !== 'pending').length})</div>
+              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/admin/merchants')}>
+                Full Merchant Manager →
+              </button>
+            </div>
+            {merchants.filter(m => m.status !== 'pending').map(m => (
               <div key={m.id} className="card">
                 <div className="card-title">
-                  {m.name} <span className={`badge badge-${m.status}`}>{m.status}</span>
+                  {m.name}
+                  <span className={`badge badge-${m.status}`}>{m.status}</span>
                 </div>
                 <div className="card-meta">
-                  {m.category} • {m.address}
+                  {m.category} • {m.address} • ZIP {m.zip}
+                  {m.creator_name && ` • Added by ${m.creator_name}`}
+                </div>
+                <div className="card-actions">
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteMerchant(m.id, m.name)}>🗑️ Delete</button>
                 </div>
               </div>
             ))}
