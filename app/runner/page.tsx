@@ -355,8 +355,9 @@ export default function RunnerDashboard() {
                   <div className="address-row">
                     <div className="address-icon">📍</div>
                     <div>
-                      <div className="address-label">Pickup</div>
-                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.pickup)}</div>
+                      <div className="address-label">Pickup{r.merchant_name ? ` — ${r.merchant_name}` : ''}</div>
+                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.merchant_address || r.pickup)}</div>
+                      {r.merchant_hours && <div style={{fontSize:'0.78rem',color:'#888',marginTop:'2px'}}>🕐 {r.merchant_hours}</div>}
                     </div>
                   </div>
                   <div className="address-row">
@@ -423,8 +424,9 @@ export default function RunnerDashboard() {
                   <div className="address-row">
                     <div className="address-icon">📍</div>
                     <div>
-                      <div className="address-label">Pickup</div>
-                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.pickup)}</div>
+                      <div className="address-label">Pickup{r.merchant_name ? ` — ${r.merchant_name}` : ''}</div>
+                      <div className="address-text">{formatAddress(r.pickup_street, r.pickup_city, r.pickup_state, r.pickup_zip, r.merchant_address || r.pickup)}</div>
+                      {r.merchant_hours && <div style={{fontSize:'0.78rem',color:'#888',marginTop:'2px'}}>🕐 {r.merchant_hours}</div>}
                     </div>
                   </div>
                   <div className="address-row">
