@@ -2,7 +2,7 @@
 
 // components/NotificationBell.tsx
 // Simple, mobile-friendly notification bell
-// Push prompt is a fixed bottom sheet, not a dropdown
+// Push prompt is a fixed bottom sheet, not inside a dropdown
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -46,7 +46,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Get effective role (respects admin preview)
   const effectiveRole = typeof window !== 'undefined'
     ? sessionStorage.getItem(PREVIEW_ROLE_KEY) || role
     : role;
@@ -64,10 +63,8 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         setEnabling(false);
         return false;
       }
-
       const reg = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
-
       let subscription = await reg.pushManager.getSubscription();
       if (!subscription) {
         subscription = await reg.pushManager.subscribe({
@@ -75,13 +72,11 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
         });
       }
-
       const res = await fetch('/.netlify/functions/push-subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, subscription })
       });
-
       if (res.ok) {
         setPushEnabled(true);
         localStorage.setItem('push_enabled', 'true');
@@ -92,25 +87,22 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
       }
     } catch (err) {
       console.error('Push setup failed:', err);
-      alert('Failed to enable push notifications. Please try again.');
+      alert("Failed: " + (err?.message || JSON.stringify(err)));
     }
     setEnabling(false);
     return false;
   }, [userId]);
 
-  // Check if already enabled
   useEffect(() => {
     const stored = localStorage.getItem('push_enabled');
     if (stored === 'true') {
       setPushEnabled(true);
-      // Re-register silently
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
       }
     }
   }, []);
 
-  // Show push prompt for runners/owners after a delay
   useEffect(() => {
     if (pushEnabled) return;
     const dismissed = localStorage.getItem('push_dismissed');
@@ -121,7 +113,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   }, [effectiveRole, pushEnabled]);
 
-  // Poll for notifications
   const checkNotifications = useCallback(async () => {
     if (!userId || !effectiveRole) return;
     try {
@@ -139,9 +130,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         }
         lastChecked.current = data.checkedAt || new Date().toISOString();
       }
-    } catch (e) {
-      // silent fail
-    }
+    } catch (e) {}
   }, [userId, effectiveRole]);
 
   useEffect(() => {
@@ -163,21 +152,14 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
   return (
     <>
-      {/* Push prompt — fixed bottom sheet, always on top */}
+      {/* Push prompt — fixed bottom sheet */}
       {showPushPrompt && !pushEnabled && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: '#2d4a2d',
-            color: 'white',
-            padding: '20px',
-            zIndex: 99999,
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
-          }}
-        >
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          background: '#2d4a2d', color: 'white',
+          padding: '20px', zIndex: 99999,
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+        }}>
           <div style={{ maxWidth: '500px', margin: '0 auto' }}>
             <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '6px' }}>
               🔔 Get notified of new jobs
@@ -190,16 +172,9 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                 onClick={enablePushNotifications}
                 disabled={enabling}
                 style={{
-                  flex: 1,
-                  background: '#7ab87a',
-                  border: 'none',
-                  color: 'white',
-                  padding: '14px',
-                  borderRadius: '10px',
-                  fontSize: '15px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  fontFamily: 'DM Sans, sans-serif',
+                  flex: 1, background: '#7ab87a', border: 'none', color: 'white',
+                  padding: '14px', borderRadius: '10px', fontSize: '15px',
+                  fontWeight: 700, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
                 }}
               >
                 {enabling ? 'Enabling...' : '✅ Enable Notifications'}
@@ -210,14 +185,9 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                   setShowPushPrompt(false);
                 }}
                 style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  border: 'none',
-                  color: 'white',
-                  padding: '14px 20px',
-                  borderRadius: '10px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  fontFamily: 'DM Sans, sans-serif',
+                  background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white',
+                  padding: '14px 20px', borderRadius: '10px', fontSize: '14px',
+                  cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
                 }}
               >
                 Not now
@@ -230,111 +200,63 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
       {/* Bell button */}
       <div style={{ position: 'relative' }}>
         <button
-          onClick={() => {
-            setShowDropdown(!showDropdown);
-            if (!showDropdown) markAllRead();
-          }}
+          onClick={() => { setShowDropdown(!showDropdown); if (!showDropdown) markAllRead(); }}
           style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            position: 'relative',
-            padding: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '44px',
-            minHeight: '44px',
+            background: 'none', border: 'none', cursor: 'pointer',
+            position: 'relative', padding: '6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minWidth: '44px', minHeight: '44px',
           }}
         >
           <span style={{ fontSize: '22px' }}>🔔</span>
           {unreadCount > 0 && (
             <span style={{
-              position: 'absolute',
-              top: '0px',
-              right: '0px',
-              background: '#e53e3e',
-              color: 'white',
-              borderRadius: '50%',
-              width: '18px',
-              height: '18px',
-              fontSize: '11px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              position: 'absolute', top: '0px', right: '0px',
+              background: '#e53e3e', color: 'white', borderRadius: '50%',
+              width: '18px', height: '18px', fontSize: '11px', fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
           {!pushEnabled && (
             <span style={{
-              position: 'absolute',
-              top: '0px',
-              left: '0px',
-              background: '#ff9800',
-              borderRadius: '50%',
-              width: '8px',
-              height: '8px',
+              position: 'absolute', top: '0px', left: '0px',
+              background: '#ff9800', borderRadius: '50%', width: '8px', height: '8px',
             }} />
           )}
         </button>
 
-        {/* Dropdown */}
         {showDropdown && (
           <>
-            {/* Backdrop to close */}
-            <div
-              onClick={() => setShowDropdown(false)}
-              style={{
-                position: 'fixed',
-                top: 0, left: 0, right: 0, bottom: 0,
-                zIndex: 998,
-              }}
-            />
+            <div onClick={() => setShowDropdown(false)} style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998,
+            }} />
             <div style={{
-              position: 'absolute',
-              right: 0,
-              top: '100%',
-              marginTop: '8px',
-              width: '300px',
-              background: 'white',
-              borderRadius: '12px',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-              zIndex: 999,
-              maxHeight: '400px',
-              overflowY: 'auto',
+              position: 'absolute', right: 0, top: '100%', marginTop: '8px',
+              width: '300px', background: 'white', borderRadius: '12px',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.15)', zIndex: 999,
+              maxHeight: '400px', overflowY: 'auto',
             }}>
               <div style={{
-                padding: '14px 16px',
-                borderBottom: '1px solid #f0f0f0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                position: 'sticky',
-                top: 0,
-                background: 'white',
+                padding: '14px 16px', borderBottom: '1px solid #f0f0f0',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                position: 'sticky', top: 0, background: 'white',
               }}>
                 <span style={{ fontWeight: 700, fontSize: '15px', color: '#2d4a2d' }}>
                   Notifications
                 </span>
                 {!pushEnabled && (
                   <button
-                    onPointerDown={(e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
                       setShowDropdown(false);
                       setTimeout(() => setShowPushPrompt(true), 100);
                     }}
                     style={{
-                      background: '#2d4a2d',
-                      border: 'none',
-                      color: 'white',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      fontFamily: 'DM Sans, sans-serif',
+                      background: '#2d4a2d', border: 'none', color: 'white',
+                      padding: '6px 12px', borderRadius: '6px', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
                     }}
                   >
                     Enable Push
@@ -347,19 +269,11 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                   No notifications yet
                 </div>
               ) : notifications.map(n => (
-                <div
-                  key={n.id}
-                  onPointerDown={() => handleNotificationClick(n)}
-                  style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid #f5f5f5',
-                    cursor: 'pointer',
-                    background: n.read ? 'white' : '#f0f7f0',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '10px',
-                  }}
-                >
+                <div key={n.id} onClick={() => handleNotificationClick(n)} style={{
+                  padding: '12px 16px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer',
+                  background: n.read ? 'white' : '#f0f7f0',
+                  display: 'flex', alignItems: 'flex-start', gap: '10px',
+                }}>
                   <span style={{ fontSize: '20px', flexShrink: 0 }}>
                     {n.type === 'new_request' ? '📦' : n.type === 'new_message' ? '💬' : '🔔'}
                   </span>
@@ -367,9 +281,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                     <div style={{ fontWeight: n.read ? 500 : 700, fontSize: '13px', color: '#2d4a2d' }}>
                       {n.title}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-                      {n.body}
-                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{n.body}</div>
                     <div style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>
                       {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
