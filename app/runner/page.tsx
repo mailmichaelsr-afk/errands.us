@@ -58,7 +58,7 @@ export default function RunnerDashboard() {
   const [myJobs, setMyJobs] = useState<Request[]>([]);
   const [completedJobs, setCompletedJobs] = useState<Request[]>([]);
   const [merchants, setMerchants] = useState<any[]>([]);
-  const [tab, setTab] = useState<"available" | "myjobs" | "history" | "merchants">("available");
+  const [tab, setTab] = useState<"available" | "myjobs" | "history" | "merchants" | "guide">("available");
   const [loadingData, setLoadingData] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -331,6 +331,9 @@ export default function RunnerDashboard() {
           <button className={`tab ${tab === "merchants" ? "active" : ""}`} onClick={() => setTab("merchants")}>
             Merchants ({merchants.length})
           </button>
+          <button className={`tab ${tab === "guide" ? "active" : ""}`} onClick={() => setTab("guide")}>
+            📖 Guide
+          </button>
         </div>
 
         {/* Available Jobs */}
@@ -580,6 +583,121 @@ export default function RunnerDashboard() {
                 <button className="btn btn-danger btn-sm" onClick={() => hideMerchant(m.id, m.name)}>Remove</button>
               </div>
             ))}
+          </>
+        )}
+
+        {/* GUIDE TAB */}
+        {tab === "guide" && (
+          <>
+            <div style={{background: '#2d4a2d', borderRadius: '14px', padding: '24px', marginBottom: '20px', color: '#f5f0e8'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px'}}>
+                Welcome to Errands.us! 🏃
+              </div>
+              <div style={{fontSize: '0.9rem', opacity: 0.85, lineHeight: 1.6}}>
+                You're a runner. That means people in your area post errands and you get paid to handle them. Here's everything you need to know.
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.1rem', fontWeight: 700, color: '#2d4a2d', marginBottom: '16px'}}>
+                📋 How It Works
+              </div>
+              {[
+                { step: '1', title: 'Customer posts a request', desc: 'They describe what they need, where to pick it up, where to deliver it, and how much they\'ll pay.' },
+                { step: '2', title: 'You see it in Available Jobs', desc: 'Open requests show up on your Available tab. You can see the pickup location, delivery address, and the offer before you commit.' },
+                { step: '3', title: 'Accept the job', desc: 'Hit Accept and it\'s yours. The customer gets notified. Nobody else can take it.' },
+                { step: '4', title: 'Complete the errand', desc: 'Pick up the item, deliver it, then hit Mark Complete. The customer pays you directly — cash, Venmo, Zelle, whatever they chose.' },
+                { step: '5', title: 'Repeat', desc: 'The more you do, the more you earn. There\'s no limit.' },
+              ].map(item => (
+                <div key={item.step} style={{display: 'flex', gap: '14px', marginBottom: '16px'}}>
+                  <div style={{background: '#2d4a2d', color: '#f5f0e8', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0}}>
+                    {item.step}
+                  </div>
+                  <div>
+                    <div style={{fontWeight: 600, color: '#1a1a1a', marginBottom: '3px'}}>{item.title}</div>
+                    <div style={{fontSize: '0.85rem', color: '#666', lineHeight: 1.5}}>{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Setting up your area */}
+            <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.1rem', fontWeight: 700, color: '#2d4a2d', marginBottom: '12px'}}>
+                📍 Setting Up Your Service Area
+              </div>
+              <div style={{fontSize: '0.88rem', color: '#555', lineHeight: 1.7}}>
+                <p style={{marginBottom: '10px'}}>Your service area is based on your ZIP code in your profile. Jobs posted for your ZIP will show up in your Available Jobs tab.</p>
+                <p style={{marginBottom: '10px'}}><strong>To set or update your ZIP:</strong> tap the ← Home button, open the Menu, go to Profile & Settings, and enter your ZIP code.</p>
+                <p><strong>Want to work a different area?</strong> You can add merchants in any ZIP code — those will be personal to you only. Customers in that area can still post requests and you'll see them as long as you check the app.</p>
+              </div>
+            </div>
+
+            {/* Setting up merchants */}
+            <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.1rem', fontWeight: 700, color: '#2d4a2d', marginBottom: '12px'}}>
+                🏪 Setting Up Merchants
+              </div>
+              <div style={{fontSize: '0.88rem', color: '#555', lineHeight: 1.7}}>
+                <p style={{marginBottom: '10px'}}>Merchants are the stores and businesses you can pick up from. When a customer posts a request, they choose from the merchants in their area. The more merchants you add, the more useful the app is for everyone.</p>
+                <p style={{marginBottom: '10px'}}><strong>To add a merchant:</strong> go to the Merchants tab, hit + Add Merchant, and fill in the name, category, ZIP, and address.</p>
+                <p style={{marginBottom: '10px'}}><strong>Merchants in your ZIP</strong> are shared with everyone in that area — no duplicate work.</p>
+                <p><strong>Merchants outside your ZIP</strong> are personal — only you can see them. Great for expanding your service area.</p>
+              </div>
+            </div>
+
+            {/* Payments */}
+            <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.1rem', fontWeight: 700, color: '#2d4a2d', marginBottom: '12px'}}>
+                💰 Getting Paid
+              </div>
+              <div style={{fontSize: '0.88rem', color: '#555', lineHeight: 1.7}}>
+                <p style={{marginBottom: '10px'}}>Payments are handled directly between you and the customer. Errands.us doesn't take a cut.</p>
+                <p style={{marginBottom: '10px'}}>When you accept a job, you'll see what the customer is offering and how they want to pay — cash, Venmo, Zelle, PayPal, CashApp, or Apple Pay.</p>
+                <p>If the offer seems too low for the job, you don't have to take it. Leave it open and wait — customers can raise their offer if nobody accepts.</p>
+              </div>
+            </div>
+
+            {/* Promote yourself */}
+            <div style={{background: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '14px', boxShadow: '0 2px 8px rgba(45,74,45,0.06)'}}>
+              <div style={{fontFamily: 'Fraunces, serif', fontSize: '1.1rem', fontWeight: 700, color: '#2d4a2d', marginBottom: '12px'}}>
+                📣 Promote Yourself
+              </div>
+              <div style={{fontSize: '0.88rem', color: '#555', marginBottom: '14px', lineHeight: 1.7}}>
+                The more people know you're a runner, the more jobs you get. Share this on Facebook, Nextdoor, or text it to people you know.
+              </div>
+
+              {[
+                {
+                  label: 'Facebook / Nextdoor Post',
+                  text: `🏃 I just joined Errands.us as a runner in the Oconto area!\n\nNeed someone to pick up groceries, grab your prescription, run to the post office, or handle any other errand? I can help!\n\nPost your request at errands.us, set your price, and I'll take care of it. Cash, Venmo, Zelle — whatever works for you. No app fees, no middleman.\n\n👉 errands.us`,
+                },
+                {
+                  label: 'Short Text / SMS',
+                  text: `Hey! I'm now a runner on Errands.us — I can pick up groceries, prescriptions, post office runs, and more. You post the errand, set the price, I handle it. Check it out: errands.us`,
+                },
+              ].map(post => (
+                <div key={post.label} style={{marginBottom: '14px'}}>
+                  <div style={{fontSize: '0.78rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px'}}>
+                    {post.label}
+                  </div>
+                  <div style={{background: '#f5f0e8', borderRadius: '10px', padding: '14px', fontSize: '0.85rem', color: '#333', lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: '8px'}}>
+                    {post.text}
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    style={{fontSize: '0.8rem', padding: '7px 14px'}}
+                    onClick={() => {
+                      navigator.clipboard.writeText(post.text);
+                      alert('Copied to clipboard!');
+                    }}
+                  >
+                    📋 Copy to Clipboard
+                  </button>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
