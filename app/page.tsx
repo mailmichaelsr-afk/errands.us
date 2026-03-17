@@ -1,4 +1,4 @@
-// app/page.tsx - With profile address auto-fill + notification bell + territory lookup
+// app/page.tsx - With profile address auto-fill + notification bell + territory lookup + runner support
 
 "use client";
 import { useEffect, useState } from "react";
@@ -39,9 +39,11 @@ const US_STATES = [
 ];
 
 export default function Home() {
-  const { user, dbUserId, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
+  const { user, dbUserId, userRole, isTerritoryOwner, isCustomer, isAdmin, loading, logout } = useAuth();
   const router = useRouter();
   
+  const isRunner = userRole === 'runner' || userRole === 'independent_driver';
+
   const [allRequests, setAllRequests] = useState<Request[]>([]);
   const [myRequests, setMyRequests] = useState<Request[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -222,6 +224,25 @@ export default function Home() {
     }
   }, [user, dbUserId]);
 
+  const acceptRequest = async (requestId: number) => {
+    try {
+      const res = await fetch("/.netlify/functions/requests-accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: requestId, runner_id: dbUserId }),
+      });
+      if (res.ok) {
+        alert("✅ Job accepted!");
+        load();
+        router.push('/runner');
+      } else {
+        alert("❌ Request already accepted by someone else");
+      }
+    } catch (e) {
+      alert("Failed to accept request");
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const activeZip = usingProfileAddress ? profileZip : deliveryZip;
@@ -343,6 +364,11 @@ export default function Home() {
     return r.status === requestFilter;
   });
 
+  // Runners see all open requests
+  const runnerRequests = allRequests.filter(r =>
+    r.status === 'open' && (!r.assigned_to || r.assigned_to === dbUserId)
+  );
+
   const getStatusInfo = (status: string) => {
     const info: Record<string, { label: string; color: string; bg: string }> = {
       open: { label: "🟢 Open", color: "#2d6a2d", bg: "#d4f0d4" },
@@ -352,7 +378,7 @@ export default function Home() {
     return info[status] || { label: status, color: "#555", bg: "#eee" };
   };
 
-  const userRole = isAdmin ? 'admin' : isTerritoryOwner ? 'owner' : 'customer';
+  const notifRole = isAdmin ? 'admin' : isTerritoryOwner ? 'owner' : isRunner ? 'runner' : 'customer';
   const hasProfileAddress = !!(profileStreet && profileZip);
   const activeZip = usingProfileAddress ? profileZip : deliveryZip;
 
@@ -401,6 +427,17 @@ export default function Home() {
         .dropdown-item:last-child { border-bottom: none; border-radius: 0 0 12px 12px; }
         .dropdown-item:first-child { border-radius: 12px 12px 0 0; }
         .dropdown-item.logout { color: #dc3545; }
+        .runner-banner {
+          background: #2d4a2d; color: #f5f0e8; border-radius: 12px;
+          padding: 14px 18px; margin-bottom: 20px;
+          display: flex; justify-content: space-between; align-items: center;
+        }
+        .runner-banner-text { font-size: 0.9rem; font-weight: 500; }
+        .runner-banner-btn {
+          background: #7ab87a; color: #fff; border: none;
+          padding: 8px 16px; border-radius: 8px; cursor: pointer;
+          font-size: 0.85rem; font-weight: 600; font-family: 'DM Sans', sans-serif;
+        }
         .card {
           background: #fff; border-radius: 16px; padding: 24px;
           margin-bottom: 24px; box-shadow: 0 2px 12px rgba(45,74,45,0.07);
@@ -451,6 +488,8 @@ export default function Home() {
         .btn-danger { background: #dc3545; color: #fff; border: none; width: auto; }
         .btn-danger:hover { background: #c82333; }
         .btn-small { padding: 4px 8px; font-size: 0.75rem; }
+        .btn-accept { background: #7ab87a; color: #fff; border: none; width: auto; padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+        .btn-accept:hover { background: #5fa05f; }
         .alert { padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
         .alert-warning { background: #fff0e6; color: #c67700; }
         .alert-error { background: #ffe0e0; color: #c00; }
@@ -503,7 +542,7 @@ export default function Home() {
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
           <div className="user-header-right">
-            {dbUserId && <NotificationBell userId={dbUserId} role={userRole} />}
+            {dbUserId && <NotificationBell userId={dbUserId} role={notifRole} />}
             <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
               Menu ▼
             </button>
@@ -512,12 +551,25 @@ export default function Home() {
             <div className="user-dropdown">
               {isAdmin && <div className="dropdown-item" onClick={() => router.push('/admin')}>⚙️ Admin Dashboard</div>}
               {isTerritoryOwner && <div className="dropdown-item" onClick={() => router.push('/owner')}>📊 Owner Dashboard</div>}
+              {isRunner && <div className="dropdown-item" onClick={() => router.push('/runner')}>🏃 Runner Dashboard</div>}
               <div className="dropdown-item" onClick={() => router.push('/profile')}>👤 Profile & Settings</div>
               <div className="dropdown-item" onClick={() => router.push('/directory')}>🏪 Merchants</div>
               <div className="dropdown-item logout" onClick={handleLogout}>🚪 Log Out</div>
             </div>
           )}
         </div>
+
+        {/* Runner banner — show available jobs count and quick link */}
+        {isRunner && runnerRequests.length > 0 && (
+          <div className="runner-banner">
+            <div className="runner-banner-text">
+              📦 {runnerRequests.length} job{runnerRequests.length !== 1 ? 's' : ''} available in your area
+            </div>
+            <button className="runner-banner-btn" onClick={() => router.push('/runner')}>
+              View Jobs →
+            </button>
+          </div>
+        )}
 
         {!showForm ? (
           <div className="post-btn-wrapper">
@@ -602,7 +654,6 @@ export default function Home() {
                   No service available in ZIP {activeZip} at this time
                 </div>
               )}
-
               {activeZip.length < 5 && (
                 <div className="alert alert-warning">
                   Enter your delivery ZIP code first to see available merchants
@@ -742,7 +793,7 @@ export default function Home() {
         )}
 
         <div className="card">
-          <div className="card-title">{isCustomer ? "My Requests" : "All Requests"}</div>
+          <div className="card-title">{isCustomer ? "My Requests" : isRunner ? "Available Jobs" : "All Requests"}</div>
           {isCustomer && (
             <div style={{display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'}}>
               {[
@@ -762,60 +813,101 @@ export default function Home() {
               ))}
             </div>
           )}
-          {filteredRequests.length === 0 ? (
-            <div className="empty">
-              <div className="empty-icon">📦</div>
-              {isCustomer ? "You haven't posted any requests yet." : "No requests yet."}
-            </div>
-          ) : (
-            <div className="req-list">
-              {filteredRequests.slice(0, 20).map(r => {
-                const statusInfo = getStatusInfo(r.status);
-                const hasMessages = (r.message_count || 0) > 0;
-                return (
-                  <div key={r.id} className={`req-item ${hasMessages ? 'has-messages' : ''}`}
-                    onClick={() => router.push(`/request/${r.id}`)}>
-                    <div className="req-top">
-                      <div className="req-title">{r.title}</div>
-                      <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
-                        {statusInfo.label}
+
+          {/* Runner view — show available jobs with accept button */}
+          {isRunner ? (
+            runnerRequests.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📦</div>
+                No available jobs right now. Check back soon!
+              </div>
+            ) : (
+              <div className="req-list">
+                {runnerRequests.map(r => {
+                  const statusInfo = getStatusInfo(r.status);
+                  return (
+                    <div key={r.id} className="req-item" onClick={() => router.push(`/request/${r.id}`)}>
+                      <div className="req-top">
+                        <div className="req-title">{r.title}</div>
+                        <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
+                          {statusInfo.label}
+                        </div>
                       </div>
-                    </div>
-                    <div className="req-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
-                    <div className="req-meta">
-                      {r.offered_amount && `$${r.offered_amount} • `}
-                      {r.pickup_flexibility === 'asap' && 'ASAP • '}
-                      {new Date(r.created_at).toLocaleDateString()}
-                    </div>
-                    <div className="req-footer">
-                      <div className="message-indicator">
-                        {hasMessages ? (
-                          <><div className="message-badge">{r.message_count}</div>
-                          <span>💬 {r.message_count} message{r.message_count !== 1 ? 's' : ''}</span></>
-                        ) : <span style={{color: "#999"}}>No messages yet</span>}
+                      <div className="req-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
+                      <div className="req-meta">
+                        {r.offered_amount && `💰 $${r.offered_amount} • `}
+                        {r.pickup_flexibility === 'asap' && 'ASAP • '}
+                        {new Date(r.created_at).toLocaleDateString()}
                       </div>
-                      <div className="card-actions">
+                      <div className="req-footer">
                         <button className="chat-btn" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
-                          💬 Chat
+                          💬 Details
                         </button>
-                        {isCustomer && r.status === 'completed' && (
-                          <button className="chat-btn" onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
-                            style={{background: '#7ab87a', color: '#fff'}}>
-                            🔄 Order Again
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button className="btn btn-danger btn-small"
-                            onClick={(e) => { e.stopPropagation(); deleteRequest(r.id, r.title); }}>
-                            Delete
-                          </button>
-                        )}
+                        <button className="btn-accept" onClick={(e) => { e.stopPropagation(); acceptRequest(r.id); }}>
+                          ✅ Accept Job
+                        </button>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            filteredRequests.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📦</div>
+                {isCustomer ? "You haven't posted any requests yet." : "No requests yet."}
+              </div>
+            ) : (
+              <div className="req-list">
+                {filteredRequests.slice(0, 20).map(r => {
+                  const statusInfo = getStatusInfo(r.status);
+                  const hasMessages = (r.message_count || 0) > 0;
+                  return (
+                    <div key={r.id} className={`req-item ${hasMessages ? 'has-messages' : ''}`}
+                      onClick={() => router.push(`/request/${r.id}`)}>
+                      <div className="req-top">
+                        <div className="req-title">{r.title}</div>
+                        <div className="req-status" style={{ background: statusInfo.bg, color: statusInfo.color }}>
+                          {statusInfo.label}
+                        </div>
+                      </div>
+                      <div className="req-route">📍 {r.pickup} → 🏠 {r.dropoff}</div>
+                      <div className="req-meta">
+                        {r.offered_amount && `$${r.offered_amount} • `}
+                        {r.pickup_flexibility === 'asap' && 'ASAP • '}
+                        {new Date(r.created_at).toLocaleDateString()}
+                      </div>
+                      <div className="req-footer">
+                        <div className="message-indicator">
+                          {hasMessages ? (
+                            <><div className="message-badge">{r.message_count}</div>
+                            <span>💬 {r.message_count} message{r.message_count !== 1 ? 's' : ''}</span></>
+                          ) : <span style={{color: "#999"}}>No messages yet</span>}
+                        </div>
+                        <div className="card-actions">
+                          <button className="chat-btn" onClick={(e) => { e.stopPropagation(); router.push(`/request/${r.id}`); }}>
+                            💬 Chat
+                          </button>
+                          {isCustomer && r.status === 'completed' && (
+                            <button className="chat-btn" onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
+                              style={{background: '#7ab87a', color: '#fff'}}>
+                              🔄 Order Again
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button className="btn btn-danger btn-small"
+                              onClick={(e) => { e.stopPropagation(); deleteRequest(r.id, r.title); }}>
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       </div>
