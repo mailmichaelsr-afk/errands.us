@@ -1,10 +1,18 @@
-// netlify/functions/requests-get.js - UPDATED to include driver info
+// netlify/functions/requests-get.js
 
-import { neon } from "@neondatabase/serverless";
+const { neon } = require("@neondatabase/serverless");
 
-export const config = { runtime: "nodejs" };
+exports.handler = async (event) => {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  };
 
-export async function handler(event) {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers, body: "" };
+  }
+
   try {
     const sql = neon(process.env.DATABASE_URL);
 
@@ -13,23 +21,25 @@ export async function handler(event) {
         r.*,
         c.full_name as customer_name,
         c.email as customer_email,
-        d.full_name as driver_name,
-        d.email as driver_email
+        u.full_name as runner_name,
+        u.email as runner_email
       FROM requests r
       LEFT JOIN users c ON r.customer_id = c.id
-      LEFT JOIN users d ON r.assigned_to = d.id
+      LEFT JOIN users u ON r.assigned_to = u.id
       ORDER BY r.created_at DESC
     `;
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify(requests),
     };
   } catch (err) {
     console.error("requests-get error:", err);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ error: err.message }),
     };
   }
-}
+};
