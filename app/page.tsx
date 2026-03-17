@@ -1,8 +1,10 @@
 // app/page.tsx - With profile address auto-fill + notification bell + territory lookup + runner support
 
 "use client";
-import { useEffect, useState } from "react";import NotificationBell from "@/components/NotificationBell";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import NotificationBell from "@/components/NotificationBell";
 
 
 type Request = {
