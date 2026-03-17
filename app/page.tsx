@@ -1,8 +1,7 @@
 // app/page.tsx - With profile address auto-fill + notification bell + territory lookup + runner support
 
 "use client";
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react";import NotificationBell from "@/components/NotificationBell";
 import { useRouter } from "next/navigation";
 
 
@@ -544,6 +543,7 @@ export default function Home() {
             👤 {user?.user_metadata?.full_name || user?.email}
           </div>
           <div className="user-header-right">
+            {dbUserId && <NotificationBell userId={dbUserId} role={notifRole} />}
             <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
               Menu ▼
             </button>
