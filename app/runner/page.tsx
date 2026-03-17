@@ -121,10 +121,12 @@ export default function RunnerDashboard() {
   useEffect(() => {
     if (dbUserId) {
       loadData();
-      const interval = setInterval(() => loadData(), 15000);
+      const interval = setInterval(() => {
+        if (tab !== 'guide' && tab !== 'merchants') loadData();
+      }, 15000);
       return () => clearInterval(interval);
     }
-  }, [dbUserId]);
+  }, [dbUserId, tab]);
 
   const acceptRequest = async (requestId: number) => {
     try {
