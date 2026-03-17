@@ -1,71 +1,86 @@
-// netlify/functions/requests-create.js - Routes by ZIP + TIME SLOT
+// netlify/functions/requests-create.js
+// Creates a request + auto-routes + fires push notifications
 
-import { neon } from "@neondatabase/serverless";
+const { neon } = require('@neondatabase/serverless');
 
-export const config = { runtime: "nodejs" };
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' };
+  }
 
-export async function handler(event) {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   try {
+    const body = JSON.parse(event.body);
+    const {
+      customerId,
+      title,
+      pickupStreet,
+      pickupCity,
+      pickupState,
+      pickupZip,
+      deliveryStreet,
+      deliveryCity,
+      deliveryState,
+      deliveryZip,
+      deliveryInstructions,
+      offeredAmount,
+      paymentMethod,
+      pickupFlexibility,
+      deliveryFlexibility,
+      preferredDeliveryTime,
+      merchantId
+    } = body;
+
+    if (!customerId || !title) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Missing required fields' })
+      };
+    }
+
     const sql = neon(process.env.DATABASE_URL);
-    const data = JSON.parse(event.body);
 
-    // Build pickup and delivery addresses
-    const pickupAddress = [
-      data.pickup_street,
-      data.pickup_city,
-      data.pickup_state,
-      data.pickup_zip
-    ].filter(Boolean).join(", ");
+    // Determine time slot from flexibility/time
+    let timeSlot = 'morning';
+    const now = new Date();
+    const hour = now.getHours();
+    if (hour >= 12 && hour < 17) timeSlot = 'afternoon';
+    else if (hour >= 17) timeSlot = 'evening';
 
-    const deliveryAddress = [
-      data.delivery_street,
-      data.delivery_city,
-      data.delivery_state,
-      data.delivery_zip
-    ].filter(Boolean).join(", ");
-
-    // Find territory by delivery ZIP + current time slot
-    let territory = null;
+    // Auto-routing: Check for territory owner matching ZIP + time slot
     let assignedTo = null;
 
-    if (data.delivery_zip) {
-      // Get current day and time
-      const now = new Date();
-      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-      const currentDay = dayNames[now.getDay()];
-      const currentTime = now.toTimeString().slice(0, 8); // HH:MM:SS
-
-      // Find territory that matches ZIP, has this day, and is within time range
-      const territoryResult = await sql`
-        SELECT id, owner_id, status, name
-        FROM territories
-        WHERE ${data.delivery_zip} = ANY(zip_codes)
-          AND ${currentDay} = ANY(time_slot_days)
-          AND time_slot_start <= ${currentTime}::time
-          AND time_slot_end >= ${currentTime}::time
-          AND status = 'sold'
+    if (deliveryZip) {
+      const territories = await sql`
+        SELECT t.id, t.owner_id
+        FROM territories t
+        WHERE ${deliveryZip} = ANY(t.zip_codes)
+        AND ${timeSlot} = ANY(t.time_slots)
+        AND t.owner_id IS NOT NULL
+        AND t.status = 'active'
         LIMIT 1
       `;
 
-      if (territoryResult.length > 0) {
-        territory = territoryResult[0];
-        
-        // Auto-assign to territory owner
-        if (territory.owner_id) {
-          assignedTo = territory.owner_id;
-        }
+      if (territories.length > 0) {
+        assignedTo = territories[0].owner_id;
       }
-      // If no matching territory found, assigned_to stays null
-      // so all independent drivers can see it
     }
 
-    // Create request
+    // Create the request
     const result = await sql`
       INSERT INTO requests (
+        customer_id,
         title,
-        description,
-        pickup,
-        dropoff,
         pickup_street,
         pickup_city,
         pickup_state,
@@ -74,54 +89,96 @@ export async function handler(event) {
         delivery_city,
         delivery_state,
         delivery_zip,
-        customer_id,
-        status,
-        pickup_time,
-        pickup_flexibility,
-        delivery_time,
-        delivery_flexibility,
+        delivery_instructions,
         offered_amount,
         payment_method,
-        payment_notes,
+        pickup_flexibility,
+        delivery_flexibility,
+        preferred_delivery_time,
+        merchant_id,
         assigned_to,
-        created_at
+        status
       ) VALUES (
-        ${data.title},
-        ${data.description || ""},
-        ${pickupAddress},
-        ${deliveryAddress},
-        ${data.pickup_street || null},
-        ${data.pickup_city || null},
-        ${data.pickup_state || null},
-        ${data.pickup_zip || null},
-        ${data.delivery_street || null},
-        ${data.delivery_city || null},
-        ${data.delivery_state || null},
-        ${data.delivery_zip || null},
-        ${data.customer_id},
-        'open',
-        ${data.pickup_time || null},
-        ${data.pickup_flexibility || 'flexible'},
-        ${data.delivery_time || null},
-        ${data.delivery_flexibility || 'flexible'},
-        ${data.offered_amount || null},
-        ${data.payment_method || 'Cash'},
-        ${data.payment_notes || null},
+        ${customerId},
+        ${title},
+        ${pickupStreet || null},
+        ${pickupCity || null},
+        ${pickupState || null},
+        ${pickupZip || null},
+        ${deliveryStreet || null},
+        ${deliveryCity || null},
+        ${deliveryState || null},
+        ${deliveryZip || null},
+        ${deliveryInstructions || null},
+        ${offeredAmount || null},
+        ${paymentMethod || null},
+        ${pickupFlexibility || 'asap'},
+        ${deliveryFlexibility || 'asap'},
+        ${preferredDeliveryTime || null},
+        ${merchantId || null},
         ${assignedTo},
-        NOW()
+        'open'
       )
       RETURNING *
     `;
 
+    const newRequest = result[0];
+
+    // Fire push notifications asynchronously (don't block the response)
+    firePushNotifications(newRequest, assignedTo, timeSlot).catch(err => {
+      console.error('Push notification error (non-blocking):', err);
+    });
+
     return {
       statusCode: 200,
-      body: JSON.stringify(result[0]),
+      headers,
+      body: JSON.stringify({
+        success: true,
+        request: newRequest,
+        autoAssigned: !!assignedTo
+      })
     };
   } catch (err) {
-    console.error("requests-create error:", err);
+    console.error('requests-create error:', err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
+      headers,
+      body: JSON.stringify({ error: err.message })
     };
   }
+};
+
+async function firePushNotifications(request, assignedTo, timeSlot) {
+  const sql = neon(process.env.DATABASE_URL);
+  let targetUserIds = [];
+
+  if (assignedTo) {
+    // Notify the specific territory owner
+    targetUserIds = [assignedTo];
+  } else {
+    // Notify ALL active runners
+    const runners = await sql`
+      SELECT id FROM users
+      WHERE role = 'runner'
+      AND status = 'active'
+    `;
+    targetUserIds = runners.map(r => r.id);
+  }
+
+  if (!targetUserIds.length) return;
+
+  const notificationPayload = {
+    userIds: targetUserIds,
+    title: assignedTo ? '📦 New Request In Your Territory' : '📦 New Job Available',
+    body: `${request.title}${request.offered_amount ? ` — $${request.offered_amount}` : ''}`,
+    url: assignedTo ? '/owner' : '/'
+  };
+
+  // Call push-send function internally
+  const baseUrl = process.env.URL || 'http://localhost:8888';
+  await fetch(`${baseUrl}/.netlify/functions/push-send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(notificationPayload)
+  });
 }
