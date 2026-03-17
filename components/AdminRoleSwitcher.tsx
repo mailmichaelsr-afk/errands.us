@@ -20,9 +20,8 @@ export default function AdminRoleSwitcher() {
     if (stored) setPreviewRole(stored);
   }, []);
 
-  // Always show for any logged in user with a dbUserId
-  // In production only your account is admin so this is fine
-  if (!user) return null;
+  // Only show for admins
+  if (!isAdmin) return null;
 
   const activeRole = previewRole || userRole || 'admin';
 
