@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 const POLL_INTERVAL = 15000; // 15 seconds
 
-interface Notification {
+interface AppNotification {
   id: string;
   type: string;
   title: string;
@@ -36,7 +36,7 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
 }
 
 export default function NotificationBell({ userId, role }: NotificationBellProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPrompted, setPushPrompted] = useState(false);
@@ -98,7 +98,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
       if (data.notifications?.length > 0) {
         setNotifications(prev => {
           const existingIds = new Set(prev.map(n => n.id));
-          const newOnes = data.notifications.filter((n: Notification) => !existingIds.has(n.id));
+          const newOnes = data.notifications.filter((n: AppNotification) => !existingIds.has(n.id));
           return [...newOnes, ...prev].slice(0, 20); // keep last 20
         });
       }
@@ -148,7 +148,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: AppNotification) => {
     setNotifications(prev =>
       prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
     );
