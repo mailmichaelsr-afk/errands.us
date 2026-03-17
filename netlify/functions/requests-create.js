@@ -1,5 +1,5 @@
 // netlify/functions/requests-create.js
-// Creates a request + auto-routes + fires push notifications
+// Creates a request — never auto-assigns, just notifies
 
 const { neon } = require('@neondatabase/serverless');
 
@@ -7,10 +7,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type'
-      },
+      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' },
       body: ''
     };
   }
@@ -28,7 +25,6 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body);
 
-    // Accept both snake_case (from frontend) and camelCase (legacy)
     const customerId = body.customer_id || body.customerId;
     const title = body.title;
     const pickupStreet = body.pickup_street || body.pickupStreet || null;
@@ -58,32 +54,23 @@ exports.handler = async (event) => {
 
     const sql = neon(process.env.DATABASE_URL);
 
-    // Determine time slot from current hour
-    let timeSlot = 'morning';
-    const hour = new Date().getHours();
-    if (hour >= 12 && hour < 17) timeSlot = 'afternoon';
-    else if (hour >= 17) timeSlot = 'evening';
-
-    // Auto-routing: Check for territory owner matching ZIP + time slot
-    let assignedTo = null;
-
+    // Find territory owner for this ZIP (for notifications only — NOT for assignment)
+    let territoryOwnerId = null;
     if (deliveryZip) {
       const territories = await sql`
-        SELECT t.id, t.owner_id
+        SELECT t.owner_id
         FROM territories t
         WHERE ${deliveryZip} = ANY(t.zip_codes)
-        AND ${timeSlot} = ANY(t.time_slots)
         AND t.owner_id IS NOT NULL
         AND t.status = 'active'
         LIMIT 1
       `;
-
       if (territories.length > 0) {
-        assignedTo = territories[0].owner_id;
+        territoryOwnerId = territories[0].owner_id;
       }
     }
 
-    // Create the request
+    // Create the request — assigned_to is always null, status always open
     const result = await sql`
       INSERT INTO requests (
         customer_id, title,
@@ -98,15 +85,15 @@ exports.handler = async (event) => {
         ${deliveryStreet}, ${deliveryCity}, ${deliveryState}, ${deliveryZip},
         ${deliveryInstructions}, ${offeredAmount}, ${paymentMethod},
         ${pickupFlexibility}, ${deliveryFlexibility}, ${preferredDeliveryTime},
-        ${merchantId}, ${assignedTo}, 'open'
+        ${merchantId}, null, 'open'
       )
       RETURNING *
     `;
 
     const newRequest = result[0];
 
-    // Fire push notifications async (don't block response)
-    firePushNotifications(newRequest, assignedTo).catch(err => {
+    // Notify territory owner + all runners (non-blocking)
+    firePushNotifications(newRequest, territoryOwnerId, sql).catch(err => {
       console.error('Push notification error (non-blocking):', err);
     });
 
@@ -116,8 +103,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         id: newRequest.id,
-        ...newRequest,
-        autoAssigned: !!assignedTo
+        ...newRequest
       })
     };
   } catch (err) {
@@ -130,30 +116,31 @@ exports.handler = async (event) => {
   }
 };
 
-async function firePushNotifications(request, assignedTo) {
-  const sql = neon(process.env.DATABASE_URL);
-  let targetUserIds = [];
+async function firePushNotifications(request, territoryOwnerId, sql) {
+  const targetUserIds = new Set();
 
-  if (assignedTo) {
-    targetUserIds = [assignedTo];
-  } else {
-    const runners = await sql`
-      SELECT id FROM users WHERE role = 'runner' AND status = 'active'
-    `;
-    targetUserIds = runners.map(r => r.id);
+  // Always notify territory owner if one exists
+  if (territoryOwnerId) {
+    targetUserIds.add(territoryOwnerId);
   }
 
-  if (!targetUserIds.length) return;
+  // Also notify all active runners
+  const runners = await sql`
+    SELECT id FROM users WHERE role = 'runner' AND status = 'active'
+  `;
+  runners.forEach(r => targetUserIds.add(r.id));
+
+  if (!targetUserIds.size) return;
 
   const baseUrl = process.env.URL || 'http://localhost:8888';
   await fetch(`${baseUrl}/.netlify/functions/push-send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      userIds: targetUserIds,
-      title: assignedTo ? '📦 New Request In Your Territory' : '📦 New Job Available',
+      userIds: Array.from(targetUserIds),
+      title: '📦 New Job Available',
       body: `${request.title}${request.offered_amount ? ` — $${request.offered_amount}` : ''}`,
-      url: assignedTo ? '/owner' : '/'
+      url: '/'
     })
   });
 }
