@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-type Role = "customer" | "independent_driver" | "territory_owner";
+type Role = "customer" | "runner" | "territory_owner";
 
 export default function UnifiedSignup() {
   const [role, setRole] = useState<Role>("customer");
@@ -16,14 +16,12 @@ export default function UnifiedSignup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   
-  // Customer address fields
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
   
-  // Territory owner extras
   const [businessName, setBusinessName] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [why, setWhy] = useState("");
@@ -67,19 +65,15 @@ export default function UnifiedSignup() {
     setLoading(true);
     
     try {
-      console.log("Creating Netlify Identity account...");
       const signupResult = await identity.gotrue.signup(email.trim(), password, {
         full_name: name.trim(),
         phone: phone.trim(),
         role: role,
       });
       
-      console.log("Signup result:", signupResult);
       const userId = signupResult?.id || signupResult?.user?.id;
-      console.log("User ID:", userId);
       
       if (userId) {
-        console.log("Creating DB user...");
         const dbResponse = await fetch("/.netlify/functions/users-create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -90,7 +84,6 @@ export default function UnifiedSignup() {
             phone: phone.trim(),
             role: role,
             status: role === "territory_owner" ? "pending" : "active",
-            // Add address for customers
             ...(role === "customer" && {
               street: street.trim(),
               city: city.trim(),
@@ -102,14 +95,8 @@ export default function UnifiedSignup() {
         });
         
         const dbResult = await dbResponse.json();
-        console.log("DB creation result:", dbResult);
-        
-        if (!dbResponse.ok) {
-          console.error("DB creation failed:", dbResult);
-          throw new Error("Failed to create user account");
-        }
+        if (!dbResponse.ok) throw new Error("Failed to create user account");
       } else {
-        console.error("No user ID found in signup result");
         throw new Error("Signup failed - no user ID");
       }
 
@@ -121,7 +108,6 @@ export default function UnifiedSignup() {
       router.push("/login");
       
     } catch (e: any) {
-      console.error("Signup error:", e);
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
     }
@@ -133,10 +119,10 @@ export default function UnifiedSignup() {
       subtitle: "Post errands and get help from neighbors",
       icon: "🛒"
     },
-    independent_driver: {
-      title: "Become a Driver",
+    runner: {
+      title: "Become a Runner",
       subtitle: "Start earning money helping your neighbors",
-      icon: "🚗"
+      icon: "🏃"
     },
     territory_owner: {
       title: "Apply as Territory Owner",
@@ -165,26 +151,17 @@ export default function UnifiedSignup() {
         }
         .logo { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 700; color: #2d4a2d; margin-bottom: 20px; }
         .logo span { color: #7ab87a; }
-        
-        .role-selector {
-          display: flex; gap: 8px; margin-bottom: 24px;
-        }
+        .role-selector { display: flex; gap: 8px; margin-bottom: 24px; }
         .role-btn {
           flex: 1; padding: 12px; border: 2px solid #e0d8cc; border-radius: 10px;
           background: #faf8f4; cursor: pointer; transition: all 0.2s;
-          font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
-          text-align: center;
+          font-family: 'DM Sans', sans-serif; font-size: 0.85rem; text-align: center;
         }
         .role-btn:hover { border-color: #7ab87a; }
-        .role-btn.active { 
-          background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d;
-          font-weight: 600;
-        }
+        .role-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; font-weight: 600; }
         .role-btn-icon { font-size: 1.4rem; display: block; margin-bottom: 4px; }
-        
         .heading { font-family: 'Fraunces', serif; font-size: 1.3rem; color: #2d4a2d; margin-bottom: 6px; }
         .sub { color: #999; font-size: 0.88rem; margin-bottom: 24px; }
-        
         label { display: block; font-size: 0.83rem; font-weight: 500; color: #555; margin-bottom: 5px; }
         .input, .textarea {
           display: block; width: 100%; padding: 11px 14px; margin-bottom: 14px;
@@ -196,46 +173,27 @@ export default function UnifiedSignup() {
         .textarea { min-height: 80px; resize: vertical; }
         .input:focus, .textarea:focus { border-color: #7ab87a; box-shadow: 0 0 0 3px rgba(122,184,122,0.15); background: #fff; }
         .input::placeholder, .textarea::placeholder { color: #bbb; }
-        
-        .password-wrapper {
-          position: relative;
-          margin-bottom: 14px;
-        }
-        .password-wrapper .input {
-          margin-bottom: 0;
-          padding-right: 45px;
-        }
+        .password-wrapper { position: relative; margin-bottom: 14px; }
+        .password-wrapper .input { margin-bottom: 0; padding-right: 45px; }
         .toggle-password {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: none;
-          border: none;
-          color: #999;
-          cursor: pointer;
-          font-size: 0.85rem;
-          padding: 4px 8px;
-          font-weight: 500;
+          position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; color: #999; cursor: pointer;
+          font-size: 0.85rem; padding: 4px 8px; font-weight: 500;
         }
         .toggle-password:hover { color: #7ab87a; }
-        
         .error { background: #fff0f0; color: #c44; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 14px; }
         .notice {
           background: #fff9e6; border-left: 3px solid #ffc107;
           padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem; color: #666;
         }
-        
         .btn-primary {
           width: 100%; padding: 13px; background: #2d4a2d; color: #f5f0e8;
           border: none; border-radius: 11px;
           font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
-          font-weight: 500; cursor: pointer; transition: background 0.2s;
-          margin-top: 6px;
+          font-weight: 500; cursor: pointer; transition: background 0.2s; margin-top: 6px;
         }
         .btn-primary:hover:not(:disabled) { background: #3d6b3d; }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        
         .footer { text-align: center; margin-top: 20px; font-size: 0.88rem; color: #999; }
         .footer a { color: #7ab87a; text-decoration: none; font-weight: 500; }
         .footer a:hover { text-decoration: underline; }
@@ -245,27 +203,15 @@ export default function UnifiedSignup() {
         <div className="logo">errand<span>s</span></div>
         
         <div className="role-selector">
-          <button 
-            className={`role-btn ${role === 'customer' ? 'active' : ''}`}
-            onClick={() => setRole('customer')}
-            type="button"
-          >
+          <button className={`role-btn ${role === 'customer' ? 'active' : ''}`} onClick={() => setRole('customer')} type="button">
             <span className="role-btn-icon">🛒</span>
             Customer
           </button>
-          <button 
-            className={`role-btn ${role === 'independent_driver' ? 'active' : ''}`}
-            onClick={() => setRole('independent_driver')}
-            type="button"
-          >
-            <span className="role-btn-icon">🚗</span>
-            Driver
+          <button className={`role-btn ${role === 'runner' ? 'active' : ''}`} onClick={() => setRole('runner')} type="button">
+            <span className="role-btn-icon">🏃</span>
+            Runner
           </button>
-          <button 
-            className={`role-btn ${role === 'territory_owner' ? 'active' : ''}`}
-            onClick={() => setRole('territory_owner')}
-            type="button"
-          >
+          <button className={`role-btn ${role === 'territory_owner' ? 'active' : ''}`} onClick={() => setRole('territory_owner')} type="button">
             <span className="role-btn-icon">📊</span>
             Owner
           </button>
@@ -281,153 +227,63 @@ export default function UnifiedSignup() {
         )}
 
         <label>Full Name *</label>
-        <input
-          className="input"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="John Doe"
-        />
+        <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="John Doe" />
 
         <label>Email *</label>
-        <input
-          className="input"
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="you@example.com"
-        />
+        <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
 
         <label>Phone</label>
-        <input
-          className="input"
-          type="tel"
-          value={phone}
-          onChange={e => setPhone(e.target.value)}
-          placeholder="(555) 123-4567"
-        />
+        <input className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" />
 
         {role === "customer" && (
           <>
-            <label style={{marginTop: '16px', fontWeight: 600, color: '#2d4a2d'}}>
-              Default Delivery Address
-            </label>
-            
+            <label style={{marginTop: '16px', fontWeight: 600, color: '#2d4a2d'}}>Default Delivery Address</label>
             <label>Street Address *</label>
-            <input
-              className="input"
-              value={street}
-              onChange={e => setStreet(e.target.value)}
-              placeholder="123 Main St"
-            />
-
+            <input className="input" value={street} onChange={e => setStreet(e.target.value)} placeholder="123 Main St" />
             <label>City *</label>
-            <input
-              className="input"
-              value={city}
-              onChange={e => setCity(e.target.value)}
-              placeholder="Madison"
-            />
-
+            <input className="input" value={city} onChange={e => setCity(e.target.value)} placeholder="Oconto" />
             <label>State *</label>
-            <input
-              className="input"
-              value={state}
-              onChange={e => setState(e.target.value)}
-              placeholder="WI"
-              maxLength={2}
-            />
-
+            <input className="input" value={state} onChange={e => setState(e.target.value)} placeholder="WI" maxLength={2} />
             <label>ZIP Code *</label>
-            <input
-              className="input"
-              value={zip}
-              onChange={e => setZip(e.target.value)}
-              placeholder="54153"
-              maxLength={5}
-            />
-
+            <input className="input" value={zip} onChange={e => setZip(e.target.value)} placeholder="54153" maxLength={5} />
             <label>Delivery Instructions (optional)</label>
-            <textarea
-              className="textarea"
-              value={deliveryInstructions}
-              onChange={e => setDeliveryInstructions(e.target.value)}
-              placeholder="e.g., Use back door, Ring doorbell twice, Gate code: 1234"
-              style={{minHeight: '60px'}}
-            />
+            <textarea className="textarea" value={deliveryInstructions} onChange={e => setDeliveryInstructions(e.target.value)}
+              placeholder="e.g., Use back door, Ring doorbell twice, Gate code: 1234" style={{minHeight: '60px'}} />
           </>
         )}
 
         {role === "territory_owner" && (
           <>
             <label>Business Name (optional)</label>
-            <input
-              className="input"
-              value={businessName}
-              onChange={e => setBusinessName(e.target.value)}
-              placeholder="My Errands LLC"
-            />
-
+            <input className="input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="My Errands LLC" />
             <label>Desired ZIP Code (optional)</label>
-            <input
-              className="input"
-              value={zipCode}
-              onChange={e => setZipCode(e.target.value)}
-              placeholder="90210"
-            />
-
+            <input className="input" value={zipCode} onChange={e => setZipCode(e.target.value)} placeholder="54153" />
             <label>Why do you want to be a territory owner? (optional)</label>
-            <textarea
-              className="textarea"
-              value={why}
-              onChange={e => setWhy(e.target.value)}
-              placeholder="Tell us about your experience..."
-            />
+            <textarea className="textarea" value={why} onChange={e => setWhy(e.target.value)} placeholder="Tell us about your experience..." />
           </>
         )}
 
         <label>Password *</label>
         <div className="password-wrapper">
-          <input
-            className="input"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-          <button
-            type="button"
-            className="toggle-password"
-            onClick={() => setShowPassword(!showPassword)}
-          >
+          <input className="input" type={showPassword ? "text" : "password"} value={password}
+            onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+          <button type="button" className="toggle-password" onClick={() => setShowPassword(!showPassword)}>
             {showPassword ? "Hide" : "Show"}
           </button>
         </div>
 
         <label>Confirm Password *</label>
         <div className="password-wrapper">
-          <input
-            className="input"
-            type={showPassword ? "text" : "password"}
-            value={confirmPassword}
-            onChange={e => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-          <button
-            type="button"
-            className="toggle-password"
-            onClick={() => setShowPassword(!showPassword)}
-          >
+          <input className="input" type={showPassword ? "text" : "password"} value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
+          <button type="button" className="toggle-password" onClick={() => setShowPassword(!showPassword)}>
             {showPassword ? "Hide" : "Show"}
           </button>
         </div>
 
         {error && <div className="error">{error}</div>}
 
-        <button
-          className="btn-primary"
-          onClick={submit}
-          disabled={loading || !identity}
-        >
+        <button className="btn-primary" onClick={submit} disabled={loading || !identity}>
           {loading ? "Creating account..." : !identity ? "Loading..." : "Sign Up"}
         </button>
 
