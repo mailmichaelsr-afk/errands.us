@@ -1,7 +1,9 @@
-// lib/auth-context.tsx - FIXED to work with Netlify Identity
-
 "use client";
+// lib/auth-context.tsx
+
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+
+const PREVIEW_ROLE_KEY = 'errands_preview_role';
 
 type User = {
   id: string;
@@ -17,8 +19,10 @@ type AuthContextType = {
   dbUserId: number | null;
   userRole: string | null;
   isAdmin: boolean;
+  isActualAdmin: boolean; // true if DB role is admin, regardless of preview
   isTerritoryOwner: boolean;
   isCustomer: boolean;
+  isRunner: boolean;
   isDriver: boolean;
   loading: boolean;
   logout: () => void;
@@ -29,8 +33,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [dbUserId, setDbUserId] = useState<number | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [dbRole, setDbRole] = useState<string | null>(null); // actual DB role
+  const [userRole, setUserRole] = useState<string | null>(null); // effective role (may be preview)
   const [loading, setLoading] = useState(true);
+
+  const applyRole = (role: string) => {
+    setDbRole(role);
+    // If admin, check for preview role in sessionStorage
+    if (role === 'admin' && typeof window !== 'undefined') {
+      const preview = sessionStorage.getItem(PREVIEW_ROLE_KEY);
+      setUserRole(preview || role);
+    } else {
+      setUserRole(role);
+    }
+  };
 
   useEffect(() => {
     checkUser();
@@ -42,36 +58,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const identity = netlifyIdentity.default;
       identity.init({ logo: false });
 
-      // Get current user from Netlify Identity widget
       const netlifyUser = identity.currentUser();
-      
+
       if (netlifyUser) {
         setUser(netlifyUser);
-
-        // Get DB user info
         const dbRes = await fetch(`/.netlify/functions/users-get-by-email?email=${netlifyUser.email}`);
         if (dbRes.ok) {
           const dbUser = await dbRes.json();
           setDbUserId(dbUser.id);
-          setUserRole(dbUser.role);
+          applyRole(dbUser.role);
         }
       }
 
-      // Listen for login/logout events
       identity.on("login", async (u: any) => {
         setUser(u);
         const dbRes = await fetch(`/.netlify/functions/users-get-by-email?email=${u.email}`);
         if (dbRes.ok) {
           const dbUser = await dbRes.json();
           setDbUserId(dbUser.id);
-          setUserRole(dbUser.role);
+          applyRole(dbUser.role);
         }
       });
 
       identity.on("logout", () => {
         setUser(null);
         setDbUserId(null);
+        setDbRole(null);
         setUserRole(null);
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(PREVIEW_ROLE_KEY);
+        }
       });
 
     } catch (e) {
@@ -90,25 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const isAdmin = userRole === "admin";
-  const isTerritoryOwner = userRole === "territory_owner";
-  const isCustomer = userRole === "customer";
-  const isDriver = userRole === "independent_driver";
+  const isActualAdmin = dbRole === 'admin';
+  const isAdmin = isActualAdmin; // always based on DB, never preview
+  const isTerritoryOwner = userRole === 'territory_owner';
+  const isCustomer = userRole === 'customer';
+  const isRunner = userRole === 'runner';
+  const isDriver = userRole === 'runner' || userRole === 'independent_driver';
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        dbUserId,
-        userRole,
-        isAdmin,
-        isTerritoryOwner,
-        isCustomer,
-        isDriver,
-        loading,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user, dbUserId, userRole,
+      isAdmin, isActualAdmin,
+      isTerritoryOwner, isCustomer,
+      isRunner, isDriver,
+      loading, logout,
+    }}>
       {children}
     </AuthContext.Provider>
   );
