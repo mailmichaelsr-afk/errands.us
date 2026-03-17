@@ -33,6 +33,7 @@ type Request = {
   merchant_hours?: string;
   created_at: string;
   completed_at?: string;
+  request_type?: string;
   // legacy fields
   pickup?: string;
   dropoff?: string;
@@ -352,9 +353,14 @@ export default function RunnerDashboard() {
               <div key={r.id} className="job-card">
                 <div className="job-top">
                   <div className="job-title">{r.title}</div>
-                  {r.offered_amount ? (
-                    <div className="job-amount">${r.offered_amount}</div>
-                  ) : null}
+                  <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'4px'}}>
+                    {r.request_type === 'task' && (
+                      <span style={{fontSize:'0.72rem', background:'#e8f5e9', color:'#2d6a2d', padding:'2px 8px', borderRadius:'100px', fontWeight:600, whiteSpace:'nowrap'}}>🔧 Odd Job</span>
+                    )}
+                    {r.offered_amount ? (
+                      <div className="job-amount">${r.offered_amount}</div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="address-block">
