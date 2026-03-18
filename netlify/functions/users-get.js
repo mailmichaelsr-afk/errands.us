@@ -15,7 +15,7 @@ exports.handler = async (event) => {
 
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const { id, netlify_id } = event.queryStringParameters || {};
+    const { id, netlify_id, role } = event.queryStringParameters || {};
 
     // Single user lookup
     if (id || netlify_id) {
@@ -57,6 +57,18 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify(rows[0]),
       };
+    }
+
+    // Role filter
+    if (role) {
+      const rows = await sql`
+        SELECT id, email, full_name, name, phone, role, status,
+          street, city, state, zip, created_at
+        FROM users
+        WHERE role = ${role}
+        ORDER BY created_at DESC
+      `;
+      return { statusCode: 200, headers, body: JSON.stringify(rows) };
     }
 
     // No ID provided — return all users (admin use)
