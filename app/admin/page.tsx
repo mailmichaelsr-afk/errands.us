@@ -552,6 +552,116 @@ export default function AdminDashboard() {
 
                   {isExpanded && (
                     <>
+                      {/* Status + Quick Actions */}
+                      <div className="expanded-section">
+                        <div className="expanded-title">Status & Controls</div>
+                        <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px'}}>
+                          <button className={`btn btn-sm ${t.status === 'active' ? 'btn-success' : 'btn-secondary'}`}
+                            onClick={async () => {
+                              await fetch('/.netlify/functions/territories-update', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({id: t.id, status: t.status === 'active' ? 'inactive' : 'active'})
+                              });
+                              loadData();
+                            }}>
+                            {t.status === 'active' ? '✅ Active — click to deactivate' : '❌ Inactive — click to activate'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Edit Name & ZIPs inline */}
+                      <div className="expanded-section">
+                        <div className="expanded-title">Territory Details</div>
+                        <div style={{display: 'flex', gap: '8px', marginBottom: '8px'}}>
+                          <input className="input" style={{marginBottom: 0, flex: 2}}
+                            defaultValue={t.name}
+                            placeholder="Territory name"
+                            id={`name-${t.id}`} />
+                          <input className="input" style={{marginBottom: 0, flex: 1}}
+                            defaultValue={t.zip_codes?.join(', ')}
+                            placeholder="ZIP codes"
+                            id={`zips-${t.id}`} />
+                          <input className="input" style={{marginBottom: 0, width: '80px', flex: 'none'}}
+                            defaultValue={t.price || ''}
+                            placeholder="$/mo"
+                            type="number"
+                            id={`price-${t.id}`} />
+                          <button className="btn btn-primary btn-sm" onClick={async () => {
+                            const name = (document.getElementById(`name-${t.id}`) as HTMLInputElement)?.value;
+                            const zips = (document.getElementById(`zips-${t.id}`) as HTMLInputElement)?.value;
+                            const price = (document.getElementById(`price-${t.id}`) as HTMLInputElement)?.value;
+                            await fetch('/.netlify/functions/territories-update', {
+                              method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify({
+                                id: t.id,
+                                name: name.trim(),
+                                zip_codes: zips.split(',').map((z: string) => z.trim()).filter(Boolean),
+                                price: price ? parseFloat(price) : null,
+                              })
+                            });
+                            loadData();
+                          }}>Save</button>
+                        </div>
+                      </div>
+
+                      {/* Time Slots */}
+                      <div className="expanded-section">
+                        <div className="expanded-title">Time Slots (24-hour)</div>
+                        <div style={{fontSize: '0.78rem', color: '#888', marginBottom: '10px'}}>
+                          Toggle which hours this territory is active. Green = active.
+                        </div>
+                        <div style={{display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '10px'}}>
+                          {/* Quick selects */}
+                          {[
+                            {label: 'All 24', hours: Array.from({length: 24}, (_, i) => String(i))},
+                            {label: 'Morning', hours: ['6','7','8','9','10','11']},
+                            {label: 'Afternoon', hours: ['12','13','14','15','16','17']},
+                            {label: 'Evening', hours: ['18','19','20','21','22','23']},
+                            {label: 'None', hours: []},
+                          ].map(preset => (
+                            <button key={preset.label} className="btn btn-secondary btn-sm"
+                              style={{fontSize: '0.72rem', padding: '4px 8px'}}
+                              onClick={async () => {
+                                await fetch('/.netlify/functions/territories-update', {
+                                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                                  body: JSON.stringify({id: t.id, time_slots: preset.hours})
+                                });
+                                loadData();
+                              }}>
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px'}}>
+                          {Array.from({length: 24}, (_, i) => {
+                            const label = i === 0 ? '12am' : i < 12 ? `${i}am` : i === 12 ? '12pm' : `${i-12}pm`;
+                            const active = t.time_slots?.includes(String(i));
+                            return (
+                              <button key={i}
+                                style={{
+                                  padding: '6px 2px', border: `2px solid ${active ? '#2d4a2d' : '#e0d8cc'}`,
+                                  borderRadius: '6px', background: active ? '#2d4a2d' : '#faf8f4',
+                                  color: active ? '#f5f0e8' : '#888', fontSize: '0.7rem',
+                                  cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontWeight: active ? 700 : 400,
+                                }}
+                                onClick={async () => {
+                                  const current = t.time_slots || [];
+                                  const updated = active
+                                    ? current.filter((s: string) => s !== String(i))
+                                    : [...current, String(i)];
+                                  await fetch('/.netlify/functions/territories-update', {
+                                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({id: t.id, time_slots: updated})
+                                  });
+                                  loadData();
+                                }}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       {/* Owner details */}
                       <div className="expanded-section">
                         <div className="expanded-title">Territory Owner</div>
@@ -561,8 +671,25 @@ export default function AdminDashboard() {
                             <div className="person-detail">📧 {owner.email}</div>
                             {owner.phone && <div className="person-detail">📞 {owner.phone}</div>}
                             {owner.street && <div className="person-detail">📍 {owner.street}, {owner.city}, {owner.state} {owner.zip}</div>}
-                            <div style={{marginTop: '8px', display: 'flex', gap: '8px'}}>
+                            <div style={{marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
                               <button className="btn btn-danger btn-sm" onClick={() => unassignTerritory(t.id)}>Remove Owner</button>
+                              {/* Swap owner */}
+                              <select className="input" style={{marginBottom: 0, flex: 1, fontSize: '0.78rem'}}
+                                value=""
+                                onChange={async e => {
+                                  if (!e.target.value) return;
+                                  if (!confirm(`Transfer territory to ${e.target.options[e.target.selectedIndex].text}?`)) return;
+                                  await fetch('/.netlify/functions/territories-assign', {
+                                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({territory_id: t.id, user_id: parseInt(e.target.value)})
+                                  });
+                                  loadData();
+                                }}>
+                                <option value="">Transfer to...</option>
+                                {activeOwners.filter(u => u.id !== owner?.id).map(u => (
+                                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                                ))}
+                              </select>
                             </div>
                           </div>
                         ) : (
@@ -602,17 +729,9 @@ export default function AdminDashboard() {
                         ))}
                       </div>
 
-                      {/* Territory actions */}
+                      {/* Delete */}
                       <div className="card-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => {
-                          setEditingTerritoryId(t.id);
-                          setNewTerritoryName(t.name);
-                          setNewTerritoryZips(t.zip_codes?.join(', ') || '');
-                          setNewTerritoryPrice(t.price?.toString() || '');
-                          setShowTerritoryForm(true);
-                          setExpandedTerritory(null);
-                        }}>✏️ Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => deleteTerritory(t.id, t.name)}>🗑️ Delete</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteTerritory(t.id, t.name)}>🗑️ Delete Territory</button>
                       </div>
                     </>
                   )}
