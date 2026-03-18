@@ -64,6 +64,8 @@ export default function RunnerDashboard() {
   const [loadingData, setLoadingData] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState(false);
 
   // Merchant form state
   const [userZip, setUserZip] = useState("");
@@ -88,6 +90,7 @@ export default function RunnerDashboard() {
         const userData = await userRes.json();
         setUserZip(userData.zip || "");
         setCanAddMerchants(userData.can_add_merchants !== false);
+        setIsOnline(userData.runner_status === 'online');
 
         const activeZip = userData.service_zip || userData.zip || "";
         if (activeZip) {
@@ -191,6 +194,19 @@ export default function RunnerDashboard() {
     loadData();
   };
 
+  const toggleOnlineStatus = async () => {
+    if (!dbUserId || togglingStatus) return;
+    setTogglingStatus(true);
+    const newStatus = isOnline ? 'offline' : 'online';
+    const res = await fetch('/.netlify/functions/runner-status-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: dbUserId, status: newStatus })
+    });
+    if (res.ok) setIsOnline(!isOnline);
+    setTogglingStatus(false);
+  };
+
   if (loading || loadingData) {
     return <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', color: '#888' }}>Loading...</div>;
   }
@@ -290,6 +306,20 @@ export default function RunnerDashboard() {
             <div className="subtitle">Runner Dashboard</div>
           </div>
           <div className="header-right">
+            <button
+              onClick={toggleOnlineStatus}
+              disabled={togglingStatus}
+              style={{
+                padding: '8px 16px', borderRadius: '20px', border: 'none',
+                background: isOnline ? '#7ab87a' : '#e0d8cc',
+                color: isOnline ? '#fff' : '#666',
+                fontFamily: 'DM Sans, sans-serif', fontWeight: 700,
+                fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+              <span style={{width: '8px', height: '8px', borderRadius: '50%', background: isOnline ? '#fff' : '#999', display: 'inline-block'}} />
+              {togglingStatus ? '...' : isOnline ? 'Online' : 'Go Online'}
+            </button>
             <button className="refresh-btn" onClick={() => loadData(true)} disabled={refreshing}>
               {refreshing ? '⟳' : '↻'} Refresh
             </button>
