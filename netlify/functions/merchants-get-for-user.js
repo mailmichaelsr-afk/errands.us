@@ -1,28 +1,26 @@
 // netlify/functions/merchants-get-for-user.js
-// Get merchants for a specific user and ZIP (excludes hidden ones)
 
-import { neon } from "@neondatabase/serverless";
+const { neon } = require("@neondatabase/serverless");
 
-export const config = { runtime: "nodejs" };
+exports.handler = async (event) => {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  };
 
-export async function handler(event) {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers, body: "" };
+  }
+
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const params = new URLSearchParams(event.queryStringParameters || {});
-    const user_id = params.get("user_id");
-    const zip = params.get("zip");
+    const { user_id, zip } = event.queryStringParameters || {};
 
     if (!user_id || !zip) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "user_id and zip required" }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "user_id and zip required" }) };
     }
 
-    // Get merchants that are:
-    // 1. In the requested ZIP and NOT personal (shared by everyone)
-    // 2. OR created by this user (their personal ones from any ZIP)
-    // MINUS any they've hidden
     const merchants = await sql`
       SELECT DISTINCT m.*
       FROM merchants m
@@ -37,15 +35,9 @@ export async function handler(event) {
       ORDER BY m.name ASC
     `;
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(merchants),
-    };
+    return { statusCode: 200, headers, body: JSON.stringify(merchants) };
   } catch (err) {
     console.error("merchants-get-for-user error:", err);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
-}
+};
