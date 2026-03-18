@@ -25,7 +25,7 @@ exports.handler = async (event) => {
           SELECT 
             id, email, full_name, name, phone, role, status,
             avatar_url, created_at, last_login,
-            street, city, state, zip, delivery_instructions,
+            street, city, state, zip, delivery_instructions, service_zip,
             can_add_merchants, original_role, netlify_id
           FROM users
           WHERE id = ${parseInt(id)}
@@ -36,7 +36,7 @@ exports.handler = async (event) => {
           SELECT 
             id, email, full_name, name, phone, role, status,
             avatar_url, created_at, last_login,
-            street, city, state, zip, delivery_instructions,
+            street, city, state, zip, delivery_instructions, service_zip,
             can_add_merchants, original_role, netlify_id
           FROM users
           WHERE netlify_id = ${netlify_id}
