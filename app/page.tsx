@@ -87,7 +87,12 @@ export default function Home() {
   const [availableMerchants, setAvailableMerchants] = useState<Merchant[]>([]);
   const [useCustomPickup, setUseCustomPickup] = useState(false);
   const [territory, setTerritory] = useState<any>(null);
-  
+
+  // Runners
+  const [onlineRunners, setOnlineRunners] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const [selectedRunner, setSelectedRunner] = useState<number | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -147,6 +152,23 @@ export default function Home() {
     };
     fetchTerritory();
   }, [deliveryZip, profileZip, usingProfileAddress]);
+
+  // Load online runners when ZIP is known
+  useEffect(() => {
+    const zip = usingProfileAddress ? profileZip : deliveryZip;
+    if (!zip || zip.length !== 5 || !isCustomer) return;
+    const load = async () => {
+      try {
+        const [runnersRes, favsRes] = await Promise.all([
+          fetch(`/.netlify/functions/runners-online-get?zip=${zip}`),
+          dbUserId ? fetch(`/.netlify/functions/favorites-get?customer_id=${dbUserId}`) : Promise.resolve(null),
+        ]);
+        if (runnersRes.ok) setOnlineRunners(await runnersRes.json());
+        if (favsRes?.ok) setFavorites(await favsRes.json());
+      } catch (e) {}
+    };
+    load();
+  }, [deliveryZip, profileZip, usingProfileAddress, dbUserId, isCustomer]);
 
   // Load merchants
   useEffect(() => {
@@ -268,6 +290,7 @@ export default function Home() {
           title,
           description: description || null,
           request_type: requestType,
+          preferred_runner_id: selectedRunner || null,
           customer_id: dbUserId,
           pickup_street: pickupStreet,
           pickup_city: pickupCity,
@@ -291,7 +314,7 @@ export default function Home() {
 
       if (res.ok) {
         const newRequest = await res.json();
-        setTitle(""); setDescription(""); setRequestType('delivery');
+        setTitle(""); setDescription(""); setRequestType('delivery'); setSelectedRunner(null);
         setPickupStreet(""); setPickupCity(""); setPickupState(""); setPickupZip("");
         setDeliveryStreet(profileStreet); setDeliveryCity(profileCity);
         setDeliveryState(profileState); setDeliveryZip(profileZip);
@@ -757,6 +780,52 @@ export default function Home() {
                 </>
               )} {/* end delivery-only section */}
 
+              {/* Runner picker — only for customers when runners are online */}
+              {isCustomer && onlineRunners.length > 0 && (
+                <div style={{marginBottom: '16px'}}>
+                  <div className="section-label">
+                    Send to a specific runner? <span style={{fontWeight:400, color:'#999', fontSize:'0.78rem'}}>(optional)</span>
+                  </div>
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                    <div
+                      onClick={() => setSelectedRunner(null)}
+                      style={{
+                        padding: '12px 14px', borderRadius: '10px', cursor: 'pointer',
+                        border: `2px solid ${selectedRunner === null ? '#2d4a2d' : '#e0d8cc'}`,
+                        background: selectedRunner === null ? '#f0f7f0' : '#faf8f4',
+                        fontSize: '0.88rem', color: '#2d4a2d', fontWeight: selectedRunner === null ? 600 : 400,
+                      }}>
+                      📢 Open to all available runners
+                    </div>
+                    {[
+                      ...onlineRunners.filter(r => favorites.some(f => f.id === r.id)),
+                      ...onlineRunners.filter(r => !favorites.some(f => f.id === r.id)),
+                    ].map(r => (
+                      <div key={r.id}
+                        onClick={() => setSelectedRunner(r.id === selectedRunner ? null : r.id)}
+                        style={{
+                          padding: '12px 14px', borderRadius: '10px', cursor: 'pointer',
+                          border: `2px solid ${selectedRunner === r.id ? '#2d4a2d' : '#e0d8cc'}`,
+                          background: selectedRunner === r.id ? '#f0f7f0' : '#faf8f4',
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                        }}>
+                        <div style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: '#7ab87a', flexShrink: 0,
+                        }} />
+                        <div style={{flex: 1}}>
+                          <span style={{fontWeight: 600, fontSize: '0.9rem', color: '#1a1a1a'}}>{r.full_name}</span>
+                          {favorites.some(f => f.id === r.id) && (
+                            <span style={{marginLeft: '6px', fontSize: '0.75rem', background: '#fdf3cc', color: '#7a5c00', padding: '1px 6px', borderRadius: '10px'}}>⭐ Favorite</span>
+                          )}
+                        </div>
+                        <span style={{fontSize: '0.75rem', color: '#7ab87a', fontWeight: 600}}>Online</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="toggle-details" onClick={() => setShowDetails(!showDetails)}>
                 {showDetails ? "▼" : "▶"} Add timing, cost & payment details
               </div>
@@ -965,6 +1034,22 @@ export default function Home() {
                             <button className="chat-btn" onClick={(e) => { e.stopPropagation(); reorderRequest(r); }}
                               style={{background: '#7ab87a', color: '#fff'}}>
                               🔄 Order Again
+                            </button>
+                          )}
+                          {isCustomer && r.status === 'completed' && r.assigned_to && (
+                            <button className="chat-btn"
+                              style={{background: favorites.some(f => f.id === r.assigned_to) ? '#fdf3cc' : '#faf8f4', color: '#7a5c00'}}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await fetch('/.netlify/functions/favorites-toggle', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ customer_id: dbUserId, runner_id: r.assigned_to })
+                                });
+                                const res = await fetch(`/.netlify/functions/favorites-get?customer_id=${dbUserId}`);
+                                if (res.ok) setFavorites(await res.json());
+                              }}>
+                              {favorites.some(f => f.id === r.assigned_to) ? '⭐ Unfavorite' : '☆ Favorite Runner'}
                             </button>
                           )}
                           {isAdmin && (
