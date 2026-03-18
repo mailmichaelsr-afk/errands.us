@@ -130,12 +130,6 @@ export default function UnifiedSignup() {
     territory_owner: { title: "Apply as Territory Owner", subtitle: "Own a territory and build your errands business" }
   };
 
-  const TIME_SLOTS = [
-    { key: 'morning', label: '🌅 Morning', sub: '6am – 12pm' },
-    { key: 'afternoon', label: '☀️ Afternoon', sub: '12pm – 6pm' },
-    { key: 'evening', label: '🌙 Evening', sub: '6pm – 12am' },
-  ];
-
   return (
     <>
       <style>{`
@@ -318,16 +312,87 @@ export default function UnifiedSignup() {
             <label>Desired ZIP Code *</label>
             <input className="input" value={desiredZip} onChange={e => setDesiredZip(e.target.value)} placeholder="e.g. 54153" maxLength={5} />
 
-            <label>Desired Time Slots</label>
-            <div className="slot-grid">
-              {TIME_SLOTS.map(slot => (
-                <button key={slot.key} type="button"
-                  className={`slot-btn ${desiredSlots.includes(slot.key) ? 'active' : ''}`}
-                  onClick={() => toggleSlot(slot.key)}>
-                  {slot.label}
-                  <div className="slot-sub">{slot.sub}</div>
+            <label>Select Your Time Slots</label>
+            <div style={{fontSize: '0.82rem', color: '#666', marginBottom: '12px', lineHeight: 1.5}}>
+              Each hour is $1/month, billed annually. Select the hours you want to own in this territory.
+            </div>
+
+            {/* Quick select buttons */}
+            <div style={{display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap'}}>
+              {[
+                { label: 'All Day', hours: Array.from({length: 24}, (_, i) => i) },
+                { label: 'Morning (6am–12pm)', hours: [6,7,8,9,10,11] },
+                { label: 'Afternoon (12pm–6pm)', hours: [12,13,14,15,16,17] },
+                { label: 'Evening (6pm–12am)', hours: [18,19,20,21,22,23] },
+              ].map(preset => (
+                <button key={preset.label} type="button"
+                  style={{
+                    padding: '6px 12px', border: '1.5px solid #e0d8cc', borderRadius: '20px',
+                    background: '#faf8f4', color: '#2d4a2d', fontSize: '0.78rem',
+                    cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+                  }}
+                  onClick={() => {
+                    const allSelected = preset.hours.every(h => desiredSlots.includes(String(h)));
+                    if (allSelected) {
+                      setDesiredSlots(prev => prev.filter(s => !preset.hours.map(String).includes(s)));
+                    } else {
+                      setDesiredSlots(prev => [...new Set([...prev, ...preset.hours.map(String)])]);
+                    }
+                  }}>
+                  {preset.label}
                 </button>
               ))}
+              <button type="button"
+                style={{
+                  padding: '6px 12px', border: '1.5px solid #ffaaaa', borderRadius: '20px',
+                  background: '#fff0f0', color: '#c44', fontSize: '0.78rem',
+                  cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+                }}
+                onClick={() => setDesiredSlots([])}>
+                Clear All
+              </button>
+            </div>
+
+            {/* Hour grid */}
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px', marginBottom: '14px'}}>
+              {Array.from({length: 24}, (_, i) => {
+                const label = i === 0 ? '12am' : i < 12 ? `${i}am` : i === 12 ? '12pm' : `${i-12}pm`;
+                const selected = desiredSlots.includes(String(i));
+                return (
+                  <button key={i} type="button"
+                    onClick={() => toggleSlot(String(i))}
+                    style={{
+                      padding: '8px 4px', border: `2px solid ${selected ? '#2d4a2d' : '#e0d8cc'}`,
+                      borderRadius: '8px', background: selected ? '#2d4a2d' : '#faf8f4',
+                      color: selected ? '#f5f0e8' : '#2d4a2d', fontSize: '0.75rem',
+                      fontWeight: selected ? 700 : 400, cursor: 'pointer',
+                      fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s',
+                      textAlign: 'center',
+                    }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Price summary */}
+            <div style={{
+              background: desiredSlots.length > 0 ? '#f0f7f0' : '#faf8f4',
+              border: `1.5px solid ${desiredSlots.length > 0 ? '#7ab87a' : '#e0d8cc'}`,
+              borderRadius: '10px', padding: '14px', marginBottom: '16px',
+            }}>
+              {desiredSlots.length === 0 ? (
+                <div style={{color: '#999', fontSize: '0.85rem'}}>No time slots selected yet</div>
+              ) : (
+                <>
+                  <div style={{fontWeight: 700, color: '#2d4a2d', fontSize: '0.95rem', marginBottom: '4px'}}>
+                    {desiredSlots.length} slot{desiredSlots.length !== 1 ? 's' : ''} selected
+                  </div>
+                  <div style={{color: '#555', fontSize: '0.85rem'}}>
+                    ${desiredSlots.length}/month · <strong>${desiredSlots.length * 12}/year</strong>
+                  </div>
+                </>
+              )}
             </div>
 
             <label>Business Name (optional)</label>
