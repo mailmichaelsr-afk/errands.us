@@ -53,8 +53,8 @@ export default function UnifiedSignup() {
       setError("Name, email, and password are required.");
       return;
     }
-    if (role === "customer" && (!street.trim() || !city.trim() || !state.trim() || !zip.trim())) {
-      setError("Address is required for customers.");
+    if (!street.trim() || !city.trim() || !state.trim() || !zip.trim()) {
+      setError("Address is required.");
       return;
     }
     if (role === "territory_owner" && !desiredZip.trim()) {
@@ -96,11 +96,11 @@ export default function UnifiedSignup() {
             phone: phone.trim(),
             role: role,
             status: "active",
+            street: street.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            zip: zip.trim(),
             ...(role === "customer" && {
-              street: street.trim(),
-              city: city.trim(),
-              state: state.trim(),
-              zip: zip.trim(),
               delivery_instructions: deliveryInstructions.trim(),
             }),
           }),
@@ -295,17 +295,17 @@ export default function UnifiedSignup() {
         <label>Phone</label>
         <input className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" />
 
+        <div className="section-label">Your Address</div>
+        <label>Street Address *</label>
+        <input className="input" value={street} onChange={e => setStreet(e.target.value)} placeholder="123 Main St" />
+        <label>City *</label>
+        <input className="input" value={city} onChange={e => setCity(e.target.value)} placeholder="Oconto" />
+        <label>State *</label>
+        <input className="input" value={state} onChange={e => setState(e.target.value)} placeholder="WI" maxLength={2} />
+        <label>ZIP Code *</label>
+        <input className="input" value={zip} onChange={e => setZip(e.target.value)} placeholder="54153" maxLength={5} />
         {role === "customer" && (
           <>
-            <div className="section-label">Default Delivery Address</div>
-            <label>Street Address *</label>
-            <input className="input" value={street} onChange={e => setStreet(e.target.value)} placeholder="123 Main St" />
-            <label>City *</label>
-            <input className="input" value={city} onChange={e => setCity(e.target.value)} placeholder="Oconto" />
-            <label>State *</label>
-            <input className="input" value={state} onChange={e => setState(e.target.value)} placeholder="WI" maxLength={2} />
-            <label>ZIP Code *</label>
-            <input className="input" value={zip} onChange={e => setZip(e.target.value)} placeholder="54153" maxLength={5} />
             <label>Delivery Instructions (optional)</label>
             <textarea className="textarea" value={deliveryInstructions} onChange={e => setDeliveryInstructions(e.target.value)}
               placeholder="e.g., Use back door, Ring doorbell twice, Gate code: 1234" style={{minHeight: '60px'}} />
