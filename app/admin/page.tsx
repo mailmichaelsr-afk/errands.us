@@ -886,12 +886,12 @@ export default function AdminDashboard() {
           <>
             <div onClick={() => setChatUserId(null)} style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.5)', zIndex: 9998,
+              background: 'rgba(0,0,0,0.5)', zIndex: 99998,
             }} />
             <div style={{
               position: 'fixed', bottom: 0, left: 0, right: 0,
               background: '#fff', borderRadius: '20px 20px 0 0',
-              zIndex: 9999, maxHeight: '70vh', display: 'flex', flexDirection: 'column',
+              zIndex: 99999, maxHeight: '70vh', display: 'flex', flexDirection: 'column',
               boxShadow: '0 -4px 30px rgba(0,0,0,0.2)',
             }}>
               {/* Header */}
