@@ -107,6 +107,22 @@ export default function UnifiedSignup() {
         });
 
         if (!dbResponse.ok) throw new Error("Failed to create user account");
+
+        // If territory owner, save their application separately
+        if (role === "territory_owner") {
+          const dbUser = await dbResponse.json();
+          await fetch("/.netlify/functions/territory-application-create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: dbUser.id,
+              desired_zip: desiredZip.trim(),
+              desired_slots: desiredSlots,
+              business_name: businessName.trim() || null,
+              why: why.trim() || null,
+            }),
+          });
+        }
       } else {
         throw new Error("Signup failed - no user ID");
       }
