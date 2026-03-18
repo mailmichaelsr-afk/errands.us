@@ -1,33 +1,28 @@
 // netlify/functions/merchants-get-all.js
-// Get all merchants with creator information for admin
 
-import { neon } from "@neondatabase/serverless";
+const { neon } = require("@neondatabase/serverless");
 
-export const config = { runtime: "nodejs" };
+exports.handler = async () => {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  };
 
-export async function handler() {
   try {
     const sql = neon(process.env.DATABASE_URL);
-    
     const merchants = await sql`
       SELECT 
         m.*,
-        u.full_name as created_by_name,
-        u.email as created_by_email
+        u.full_name as creator_name,
+        u.email as creator_email
       FROM merchants m
       LEFT JOIN users u ON m.created_by = u.id
       ORDER BY m.created_at DESC
     `;
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify(merchants),
-    };
+    return { statusCode: 200, headers, body: JSON.stringify(merchants) };
   } catch (err) {
     console.error("merchants-get-all error:", err);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
-}
+};
