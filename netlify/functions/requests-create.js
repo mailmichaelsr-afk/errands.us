@@ -44,6 +44,7 @@ exports.handler = async (event) => {
     const preferredDeliveryTime = body.preferred_delivery_time || body.preferredDeliveryTime || null;
     const merchantId = body.merchant_id || body.merchantId || null;
     const requestType = body.request_type || 'delivery';
+    const preferredRunnerId = body.preferred_runner_id || null;
 
     if (!customerId || !title) {
       return {
@@ -79,14 +80,14 @@ exports.handler = async (event) => {
         delivery_street, delivery_city, delivery_state, delivery_zip,
         delivery_instructions, offered_amount, payment_method,
         pickup_flexibility, delivery_flexibility, preferred_delivery_time,
-        merchant_id, request_type, assigned_to, status
+        merchant_id, request_type, preferred_runner_id, assigned_to, status
       ) VALUES (
         ${customerId}, ${title},
         ${pickupStreet}, ${pickupCity}, ${pickupState}, ${pickupZip},
         ${deliveryStreet}, ${deliveryCity}, ${deliveryState}, ${deliveryZip},
         ${deliveryInstructions}, ${offeredAmount}, ${paymentMethod},
         ${pickupFlexibility}, ${deliveryFlexibility}, ${preferredDeliveryTime},
-        ${merchantId}, ${requestType}, null, 'open'
+        ${merchantId}, ${requestType}, ${preferredRunnerId}, null, 'open'
       )
       RETURNING *
     `;
@@ -116,12 +117,16 @@ exports.handler = async (event) => {
 async function firePushNotifications(request, territoryOwnerId, sql) {
   const targetUserIds = new Set();
 
-  if (territoryOwnerId) targetUserIds.add(territoryOwnerId);
-
-  const runners = await sql`
-    SELECT id FROM users WHERE role = 'runner' AND status = 'active'
-  `;
-  runners.forEach(r => targetUserIds.add(r.id));
+  // If there's a preferred runner, notify only them first
+  if (request.preferred_runner_id) {
+    targetUserIds.add(request.preferred_runner_id);
+  } else {
+    if (territoryOwnerId) targetUserIds.add(territoryOwnerId);
+    const runners = await sql`
+      SELECT id FROM users WHERE role IN ('runner', 'independent_driver') AND status = 'active' AND runner_status = 'online'
+    `;
+    runners.forEach(r => targetUserIds.add(r.id));
+  }
 
   if (!targetUserIds.size) return;
 
