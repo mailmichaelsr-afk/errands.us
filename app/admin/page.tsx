@@ -56,7 +56,7 @@ type Merchant = {
 };
 
 export default function AdminDashboard() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, dbUserId, loading } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<"operations" | "territories" | "people" | "requests" | "merchants" | "applications">("operations");
@@ -69,6 +69,12 @@ export default function AdminDashboard() {
   const [expandedTerritory, setExpandedTerritory] = useState<number | null>(null);
   const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
   const [peopleFilter, setPeopleFilter] = useState<"all" | "runners" | "customers" | "owners" | "pending">("all");
+
+  // Chat state
+  const [chatUserId, setChatUserId] = useState<number | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatName, setChatName] = useState("");
 
   // Territory form
   const [showTerritoryForm, setShowTerritoryForm] = useState(false);
@@ -105,6 +111,26 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (isAdmin) loadData();
   }, [isAdmin]);
+
+  const openChat = async (userId: number, name: string) => {
+    setChatUserId(userId);
+    setChatName(name);
+    setChatInput("");
+    const res = await fetch(`/.netlify/functions/direct-messages-get?user_id=${dbUserId}&other_user_id=${userId}`);
+    if (res.ok) setChatMessages(await res.json());
+  };
+
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !chatUserId || !dbUserId) return;
+    await fetch('/.netlify/functions/direct-messages-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_user_id: dbUserId, to_user_id: chatUserId, body: chatInput.trim() })
+    });
+    setChatInput("");
+    const res = await fetch(`/.netlify/functions/direct-messages-get?user_id=${dbUserId}&other_user_id=${chatUserId}`);
+    if (res.ok) setChatMessages(await res.json());
+  };
 
   const saveTerritory = async () => {
     if (!newTerritoryName.trim() || !newTerritoryZips.trim()) return;
@@ -845,10 +871,93 @@ export default function AdminDashboard() {
                     {a.status === 'approved' && (
                       <span style={{fontSize: '0.82rem', color: '#7ab87a', fontWeight: 600}}>✅ Approved — assign territory in Territories tab</span>
                     )}
+                    <button className="btn btn-secondary btn-sm" onClick={() => openChat(a.user_id, a.full_name)}>
+                      💬 Message
+                    </button>
                   </div>
                 </div>
               );
             })}
+          </>
+        )}
+
+        {/* CHAT MODAL */}
+        {chatUserId && (
+          <>
+            <div onClick={() => setChatUserId(null)} style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.5)', zIndex: 9998,
+            }} />
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0,
+              background: '#fff', borderRadius: '20px 20px 0 0',
+              zIndex: 9999, maxHeight: '70vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 -4px 30px rgba(0,0,0,0.2)',
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 20px', borderBottom: '1px solid #f0f0f0',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <div style={{fontWeight: 700, color: '#2d4a2d', fontSize: '1rem'}}>
+                  💬 {chatName}
+                </div>
+                <button onClick={() => setChatUserId(null)} style={{
+                  background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#999',
+                }}>✕</button>
+              </div>
+
+              {/* Messages */}
+              <div style={{flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                {chatMessages.length === 0 ? (
+                  <div style={{textAlign: 'center', color: '#bbb', padding: '20px', fontSize: '0.88rem'}}>
+                    No messages yet. Start the conversation.
+                  </div>
+                ) : chatMessages.map(m => {
+                  const isMe = m.from_user_id === dbUserId;
+                  return (
+                    <div key={m.id} style={{
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: isMe ? 'flex-end' : 'flex-start',
+                    }}>
+                      <div style={{
+                        background: isMe ? '#2d4a2d' : '#f5f0e8',
+                        color: isMe ? '#f5f0e8' : '#1a1a1a',
+                        padding: '10px 14px', borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                        maxWidth: '75%', fontSize: '0.88rem', lineHeight: 1.5,
+                      }}>
+                        {m.body}
+                      </div>
+                      <div style={{fontSize: '0.72rem', color: '#aaa', marginTop: '3px'}}>
+                        {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Input */}
+              <div style={{padding: '12px 16px', borderTop: '1px solid #f0f0f0', display: 'flex', gap: '8px'}}>
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
+                  placeholder="Type a message..."
+                  style={{
+                    flex: 1, padding: '10px 14px', border: '1.5px solid #e0d8cc',
+                    borderRadius: '20px', fontFamily: 'DM Sans, sans-serif',
+                    fontSize: '0.9rem', outline: 'none', background: '#faf8f4', color: '#1a1a1a',
+                  }}
+                />
+                <button onClick={sendChatMessage} style={{
+                  background: '#2d4a2d', color: '#f5f0e8', border: 'none',
+                  borderRadius: '20px', padding: '10px 18px', cursor: 'pointer',
+                  fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: '0.88rem',
+                }}>
+                  Send
+                </button>
+              </div>
+            </div>
           </>
         )}
       </div>
