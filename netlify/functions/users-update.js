@@ -39,6 +39,7 @@ exports.handler = async (event) => {
     if (data.delivery_instructions !== undefined) { updates.push(`delivery_instructions = $${updates.length + 1}`); values.push(data.delivery_instructions); }
     if (data.can_add_merchants !== undefined)     { updates.push(`can_add_merchants = $${updates.length + 1}`);     values.push(data.can_add_merchants); }
     if (data.original_role !== undefined)         { updates.push(`original_role = $${updates.length + 1}`);         values.push(data.original_role); }
+    if (data.service_zip !== undefined)           { updates.push(`service_zip = $${updates.length + 1}`);           values.push(data.service_zip); }
 
     if (updates.length === 0) {
       return {
