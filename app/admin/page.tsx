@@ -361,7 +361,11 @@ export default function AdminDashboard() {
         .empty { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
         .alert-banner { background: #ffe0e0; border: 1px solid #ffaaaa; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.88rem; color: #c00; display: flex; align-items: center; gap: 8px; }
 
-        .role-select { padding: 4px 8px; border: 1px solid #e0d8cc; border-radius: 6px; font-size: 0.78rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; cursor: pointer; }
+        .role-select { 
+          padding: 6px 10px; border: 2px solid #2d4a2d; border-radius: 8px; 
+          font-size: 0.82rem; font-family: 'DM Sans', sans-serif; 
+          background: #f0f7f0; cursor: pointer; color: #2d4a2d; font-weight: 600;
+        }
 
         @media (max-width: 600px) {
           .ops-bar { grid-template-columns: repeat(2, 1fr); }
@@ -803,10 +807,10 @@ export default function AdminDashboard() {
                   )}
                   <select className="role-select" value={u.role}
                     onChange={e => { if (confirm(`Change ${u.full_name}'s role to ${e.target.value}?`)) updateUserRole(u.id, e.target.value); }}>
-                    <option value="customer">customer</option>
-                    <option value="runner">runner</option>
-                    <option value="territory_owner">territory_owner</option>
-                    <option value="admin">admin</option>
+                    <option value="customer">🛒 Customer</option>
+                    <option value="runner">🏃 Runner</option>
+                    <option value="territory_owner">📊 Territory Owner</option>
+                    <option value="admin">👑 Admin</option>
                   </select>
                   <button className="btn btn-danger btn-sm" onClick={() => deleteUser(u.id, u.full_name)}>🗑️ Delete</button>
                 </div>
