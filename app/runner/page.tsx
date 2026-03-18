@@ -89,9 +89,10 @@ export default function RunnerDashboard() {
         setUserZip(userData.zip || "");
         setCanAddMerchants(userData.can_add_merchants !== false);
 
-        if (userData.zip) {
+        const activeZip = userData.service_zip || userData.zip || "";
+        if (activeZip) {
           const merchRes = await fetch(
-            `/.netlify/functions/merchants-get-for-user?user_id=${dbUserId}&zip=${userData.zip}`
+            `/.netlify/functions/merchants-get-for-user?user_id=${dbUserId}&zip=${activeZip}`
           );
           if (merchRes.ok) setMerchants(await merchRes.json());
         }
