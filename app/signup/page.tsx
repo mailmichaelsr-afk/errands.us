@@ -15,17 +15,19 @@ export default function UnifiedSignup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+  const [showOwnerInfo, setShowOwnerInfo] = useState(false);
+
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
-  
+
   const [businessName, setBusinessName] = useState("");
-  const [zipCode, setZipCode] = useState("");
+  const [desiredZip, setDesiredZip] = useState("");
+  const [desiredSlots, setDesiredSlots] = useState<string[]>([]);
   const [why, setWhy] = useState("");
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [identity, setIdentity] = useState<any>(null);
@@ -40,6 +42,12 @@ export default function UnifiedSignup() {
     })();
   }, []);
 
+  const toggleSlot = (slot: string) => {
+    setDesiredSlots(prev =>
+      prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot]
+    );
+  };
+
   const submit = async () => {
     if (!name.trim() || !email.trim() || !password) {
       setError("Name, email, and password are required.");
@@ -47,6 +55,10 @@ export default function UnifiedSignup() {
     }
     if (role === "customer" && (!street.trim() || !city.trim() || !state.trim() || !zip.trim())) {
       setError("Address is required for customers.");
+      return;
+    }
+    if (role === "territory_owner" && !desiredZip.trim()) {
+      setError("Please enter the ZIP code you want to own.");
       return;
     }
     if (password !== confirmPassword) {
@@ -63,16 +75,16 @@ export default function UnifiedSignup() {
     }
     setError("");
     setLoading(true);
-    
+
     try {
       const signupResult = await identity.gotrue.signup(email.trim(), password, {
         full_name: name.trim(),
         phone: phone.trim(),
         role: role,
       });
-      
+
       const userId = signupResult?.id || signupResult?.user?.id;
-      
+
       if (userId) {
         const dbResponse = await fetch("/.netlify/functions/users-create", {
           method: "POST",
@@ -83,7 +95,7 @@ export default function UnifiedSignup() {
             full_name: name.trim(),
             phone: phone.trim(),
             role: role,
-            status: role === "territory_owner" ? "pending" : "active",
+            status: "active",
             ...(role === "customer" && {
               street: street.trim(),
               city: city.trim(),
@@ -93,20 +105,19 @@ export default function UnifiedSignup() {
             }),
           }),
         });
-        
-        const dbResult = await dbResponse.json();
+
         if (!dbResponse.ok) throw new Error("Failed to create user account");
       } else {
         throw new Error("Signup failed - no user ID");
       }
 
       setLoading(false);
-      const message = role === "territory_owner" 
-        ? "✅ Application submitted! Check your email to confirm, then we'll review your application."
+      const message = role === "territory_owner"
+        ? "✅ Application submitted! Check your email to confirm your account. You can start running errands right away while we review your territory application."
         : "✅ Account created! Check your email to confirm, then you can log in.";
       alert(message);
       router.push("/login");
-      
+
     } catch (e: any) {
       setError(e.message || "Signup failed. Please try again.");
       setLoading(false);
@@ -114,22 +125,16 @@ export default function UnifiedSignup() {
   };
 
   const roleInfo = {
-    customer: {
-      title: "Sign Up as Customer",
-      subtitle: "Post errands and get help from neighbors",
-      icon: "🛒"
-    },
-    runner: {
-      title: "Become a Runner",
-      subtitle: "Start earning money helping your neighbors",
-      icon: "🏃"
-    },
-    territory_owner: {
-      title: "Apply as Territory Owner",
-      subtitle: "Run your own errands business",
-      icon: "📊"
-    }
+    customer: { title: "Sign Up as Customer", subtitle: "Post errands and get help from neighbors" },
+    runner: { title: "Become a Runner", subtitle: "Start earning money helping your neighbors" },
+    territory_owner: { title: "Apply as Territory Owner", subtitle: "Own a territory and build your errands business" }
   };
+
+  const TIME_SLOTS = [
+    { key: 'morning', label: '🌅 Morning', sub: '6am – 12pm' },
+    { key: 'afternoon', label: '☀️ Afternoon', sub: '12pm – 6pm' },
+    { key: 'evening', label: '🌙 Evening', sub: '6pm – 12am' },
+  ];
 
   return (
     <>
@@ -184,15 +189,40 @@ export default function UnifiedSignup() {
         }
         .toggle-password:hover { color: #7ab87a; }
         .error { background: #fff0f0; color: #c44; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 14px; }
-        .notice {
-          background: #fff9e6; border-left: 3px solid #ffc107;
-          padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem; color: #666;
+        .coming-soon {
+          background: #fff9e6; border: 1.5px solid #ffc107; border-radius: 10px;
+          padding: 12px 14px; margin-bottom: 16px; font-size: 0.85rem; color: #7a5c00;
+          display: flex; gap: 8px; align-items: flex-start; line-height: 1.5;
         }
+        .owner-info {
+          background: #f0f7f0; border: 1.5px solid #7ab87a; border-radius: 12px;
+          margin-bottom: 20px; overflow: hidden;
+        }
+        .owner-info-toggle {
+          width: 100%; padding: 14px 16px; background: none; border: none;
+          display: flex; justify-content: space-between; align-items: center;
+          cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+          font-weight: 600; color: #2d4a2d; text-align: left;
+        }
+        .owner-info-body { padding: 0 16px 16px; }
+        .owner-info-item { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
+        .owner-info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+        .owner-info-text { font-size: 0.84rem; color: #444; line-height: 1.5; }
+        .owner-info-text strong { color: #2d4a2d; }
+        .section-label { font-size: 0.78rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 10px; }
+        .slot-grid { display: flex; gap: 8px; margin-bottom: 14px; }
+        .slot-btn {
+          flex: 1; padding: 12px 8px; border: 2px solid #e0d8cc; border-radius: 10px;
+          background: #faf8f4; cursor: pointer; font-family: 'DM Sans', sans-serif;
+          font-size: 0.82rem; text-align: center; color: #2d4a2d; transition: all 0.2s;
+        }
+        .slot-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; font-weight: 600; }
+        .slot-btn:hover:not(.active) { border-color: #7ab87a; }
+        .slot-sub { font-size: 0.7rem; opacity: 0.75; margin-top: 3px; }
         .btn-primary {
           width: 100%; padding: 13px; background: #2d4a2d; color: #f5f0e8;
-          border: none; border-radius: 11px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
-          font-weight: 500; cursor: pointer; transition: background 0.2s; margin-top: 6px;
+          border: none; border-radius: 11px; font-family: 'DM Sans', sans-serif;
+          font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: background 0.2s; margin-top: 6px;
         }
         .btn-primary:hover:not(:disabled) { background: #3d6b3d; }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -200,10 +230,10 @@ export default function UnifiedSignup() {
         .footer a { color: #7ab87a; text-decoration: none; font-weight: 500; }
         .footer a:hover { text-decoration: underline; }
       `}</style>
-      
+
       <div className="card">
         <div className="logo">errand<span>s</span></div>
-        
+
         <div className="role-selector">
           <button className={`role-btn ${role === 'customer' ? 'active' : ''}`} onClick={() => setRole('customer')} type="button">
             <span className="role-btn-icon">🛒</span>
@@ -223,9 +253,37 @@ export default function UnifiedSignup() {
         <p className="sub">{roleInfo[role].subtitle}</p>
 
         {role === "territory_owner" && (
-          <div className="notice">
-            ⏳ Your application will be reviewed by our team. You'll be notified once approved.
-          </div>
+          <>
+            <div className="coming-soon">
+              <span>⏳</span>
+              <div>
+                <strong>Territory ownership is coming soon.</strong> Submit your application now and we'll reach out when your area opens up. You can run errands as a runner right away.
+              </div>
+            </div>
+
+            <div className="owner-info">
+              <button className="owner-info-toggle" type="button" onClick={() => setShowOwnerInfo(!showOwnerInfo)}>
+                <span>📖 What is a Territory Owner?</span>
+                <span>{showOwnerInfo ? '▲' : '▼'}</span>
+              </button>
+              {showOwnerInfo && (
+                <div className="owner-info-body">
+                  {[
+                    { icon: '📍', text: <><strong>A territory is a ZIP code + time slot.</strong> For example, you might own Oconto 54153 during morning hours — all requests in that area during your shift come to you first.</> },
+                    { icon: '🔒', text: <><strong>Exclusive access.</strong> As a territory owner you get first access to every request in your ZIP during your time slot. No competing with other runners.</> },
+                    { icon: '⏰', text: <><strong>You choose your time slots.</strong> Morning, afternoon, evening — or all day. You only lease the time you want to work.</> },
+                    { icon: '💰', text: <><strong>Monthly lease fee.</strong> Territories are leased monthly. Pricing is based on your area and the time slots you choose.</> },
+                    { icon: '🏃', text: <><strong>You're a runner too.</strong> Territory owners can run errands immediately while their application is being reviewed.</> },
+                  ].map((item, i) => (
+                    <div key={i} className="owner-info-item">
+                      <span className="owner-info-icon">{item.icon}</span>
+                      <div className="owner-info-text">{item.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         <label>Full Name *</label>
@@ -239,7 +297,7 @@ export default function UnifiedSignup() {
 
         {role === "customer" && (
           <>
-            <label style={{marginTop: '16px', fontWeight: 600, color: '#2d4a2d'}}>Default Delivery Address</label>
+            <div className="section-label">Default Delivery Address</div>
             <label>Street Address *</label>
             <input className="input" value={street} onChange={e => setStreet(e.target.value)} placeholder="123 Main St" />
             <label>City *</label>
@@ -256,12 +314,28 @@ export default function UnifiedSignup() {
 
         {role === "territory_owner" && (
           <>
+            <div className="section-label">Territory Application</div>
+            <label>Desired ZIP Code *</label>
+            <input className="input" value={desiredZip} onChange={e => setDesiredZip(e.target.value)} placeholder="e.g. 54153" maxLength={5} />
+
+            <label>Desired Time Slots</label>
+            <div className="slot-grid">
+              {TIME_SLOTS.map(slot => (
+                <button key={slot.key} type="button"
+                  className={`slot-btn ${desiredSlots.includes(slot.key) ? 'active' : ''}`}
+                  onClick={() => toggleSlot(slot.key)}>
+                  {slot.label}
+                  <div className="slot-sub">{slot.sub}</div>
+                </button>
+              ))}
+            </div>
+
             <label>Business Name (optional)</label>
             <input className="input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="My Errands LLC" />
-            <label>Desired ZIP Code (optional)</label>
-            <input className="input" value={zipCode} onChange={e => setZipCode(e.target.value)} placeholder="54153" />
-            <label>Why do you want to be a territory owner? (optional)</label>
-            <textarea className="textarea" value={why} onChange={e => setWhy(e.target.value)} placeholder="Tell us about your experience..." />
+
+            <label>Why do you want to own this territory? (optional)</label>
+            <textarea className="textarea" value={why} onChange={e => setWhy(e.target.value)}
+              placeholder="Tell us about yourself and why you're interested..." />
           </>
         )}
 
@@ -286,7 +360,7 @@ export default function UnifiedSignup() {
         {error && <div className="error">{error}</div>}
 
         <button className="btn-primary" onClick={submit} disabled={loading || !identity}>
-          {loading ? "Creating account..." : !identity ? "Loading..." : "Sign Up"}
+          {loading ? "Creating account..." : !identity ? "Loading..." : role === "territory_owner" ? "Submit Application" : "Sign Up"}
         </button>
 
         <div className="footer">
