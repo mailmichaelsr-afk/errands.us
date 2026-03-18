@@ -325,7 +325,7 @@ export default function AdminDashboard() {
         .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid #e0d8cc; background: #faf8f4; color: #555; font-size: 0.82rem; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
         .filter-btn.active { background: #2d4a2d; color: #f5f0e8; border-color: #2d4a2d; }
 
-        .input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1.5px solid #e0d8cc; border-radius: 8px; font-size: 0.9rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; outline: none; }
+        .input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1.5px solid #e0d8cc; border-radius: 8px; font-size: 0.9rem; font-family: 'DM Sans', sans-serif; background: #faf8f4; outline: none; color: #1a1a1a; }
         .input:focus { border-color: #7ab87a; background: #fff; }
         .form-card { background: #fff; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(45,74,45,0.1); border: 1px solid #e0d8cc; }
 
