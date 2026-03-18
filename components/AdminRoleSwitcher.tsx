@@ -49,7 +49,7 @@ export default function AdminRoleSwitcher() {
     <>
       <style>{`
         .role-switcher {
-          position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+          position: fixed; bottom: 20px; left: 20px; z-index: 9999;
         }
         .role-button {
           background: linear-gradient(135deg, #2d4a2d 0%, #3d6b3d 100%);
@@ -65,7 +65,7 @@ export default function AdminRoleSwitcher() {
           padding: 2px 6px; border-radius: 10px; margin-left: 4px;
         }
         .role-menu {
-          position: absolute; bottom: 100%; right: 0; margin-bottom: 12px;
+          position: absolute; bottom: 100%; left: 0; margin-bottom: 12px;
           background: #fff; border-radius: 16px;
           box-shadow: 0 8px 32px rgba(45,74,45,0.2);
           border: 2px solid #2d4a2d; min-width: 220px; overflow: hidden;
