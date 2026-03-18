@@ -59,11 +59,12 @@ export default function AdminDashboard() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"operations" | "territories" | "people" | "requests" | "merchants">("operations");
+  const [tab, setTab] = useState<"operations" | "territories" | "people" | "requests" | "merchants" | "applications">("operations");
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [expandedTerritory, setExpandedTerritory] = useState<number | null>(null);
   const [selectedOwner, setSelectedOwner] = useState<{[key: number]: string}>({});
@@ -83,16 +84,18 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoadingData(true);
     try {
-      const [terrRes, usersRes, reqRes, merchRes] = await Promise.all([
+      const [terrRes, usersRes, reqRes, merchRes, appRes] = await Promise.all([
         fetch("/.netlify/functions/territories-get"),
         fetch("/.netlify/functions/users-get"),
         fetch("/.netlify/functions/requests-get"),
         fetch("/.netlify/functions/merchants-get-all"),
+        fetch("/.netlify/functions/territory-applications-get"),
       ]);
       if (terrRes.ok) setTerritories(await terrRes.json());
       if (usersRes.ok) setUsers(await usersRes.json());
       if (reqRes.ok) setRequests(await reqRes.json());
       if (merchRes.ok) setMerchants(await merchRes.json());
+      if (appRes.ok) setApplications(await appRes.json());
     } catch (e) {
       console.error("Failed to load admin data:", e);
     }
@@ -409,6 +412,10 @@ export default function AdminDashboard() {
           <button className={`tab ${tab === 'merchants' ? 'active' : ''}`} onClick={() => setTab('merchants')}>
             🏪 Merchants ({merchants.length})
             {pendingMerchants.length > 0 && <span style={{color: '#dc3545', marginLeft: '4px'}}>●</span>}
+          </button>
+          <button className={`tab ${tab === 'applications' ? 'active' : ''}`} onClick={() => setTab('applications')}>
+            📋 Applications ({applications.length})
+            {applications.filter(a => a.status === 'pending').length > 0 && <span style={{color: '#dc3545', marginLeft: '4px'}}>●</span>}
           </button>
         </div>
 
@@ -740,6 +747,108 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </>
+        )}
+
+        {/* APPLICATIONS TAB */}
+        {tab === 'applications' && (
+          <>
+            <div className="section-head">
+              <div className="section-title">Territory Applications</div>
+            </div>
+
+            {applications.length === 0 ? (
+              <div className="empty">No applications yet.</div>
+            ) : applications.map(a => {
+              const slotCount = a.desired_slots?.length || 0;
+              const monthlyRate = slotCount;
+              const annualRate = slotCount * 12;
+              const formatHour = (h: number) => h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h-12}pm`;
+
+              return (
+                <div key={a.id} className="card" style={{borderLeft: a.status === 'pending' ? '4px solid #ffc107' : a.status === 'approved' ? '4px solid #7ab87a' : '4px solid #e0d8cc'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px'}}>
+                    <div>
+                      <div className="card-title">{a.full_name}</div>
+                      <div className="card-meta">📧 {a.email}{a.phone && ` • 📞 ${a.phone}`}</div>
+                      {a.street && <div className="card-meta">📍 {a.street}, {a.city}, {a.state} {a.zip}</div>}
+                    </div>
+                    <span className={`badge badge-${a.status}`}>{a.status}</span>
+                  </div>
+
+                  <div style={{background: '#f5f0e8', borderRadius: '10px', padding: '12px', marginBottom: '10px'}}>
+                    <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '8px'}}>
+                      <div>
+                        <div style={{fontSize: '0.72rem', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px'}}>Desired ZIP</div>
+                        <div style={{fontWeight: 700, color: '#2d4a2d', fontSize: '1.1rem'}}>{a.desired_zip}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '0.72rem', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px'}}>Time Slots</div>
+                        <div style={{fontWeight: 700, color: '#2d4a2d', fontSize: '1.1rem'}}>{slotCount} hour{slotCount !== 1 ? 's' : ''}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '0.72rem', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px'}}>Monthly</div>
+                        <div style={{fontWeight: 700, color: '#2d4a2d', fontSize: '1.1rem'}}>${monthlyRate}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '0.72rem', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px'}}>Annual</div>
+                        <div style={{fontWeight: 700, color: '#7ab87a', fontSize: '1.1rem'}}>${annualRate}</div>
+                      </div>
+                    </div>
+
+                    {a.desired_slots?.length > 0 && (
+                      <div>
+                        <div style={{fontSize: '0.72rem', color: '#999', marginBottom: '6px'}}>Selected hours:</div>
+                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+                          {[...a.desired_slots].sort((x: string, y: string) => parseInt(x) - parseInt(y)).map((h: string) => (
+                            <span key={h} style={{background: '#2d4a2d', color: '#f5f0e8', padding: '2px 8px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600}}>
+                              {formatHour(parseInt(h))}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {a.business_name && <div className="card-meta" style={{marginBottom: '4px'}}>🏢 {a.business_name}</div>}
+                  {a.why && (
+                    <div style={{background: '#fff', border: '1px solid #e0d8cc', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', fontSize: '0.85rem', color: '#444', lineHeight: 1.5}}>
+                      "{a.why}"
+                    </div>
+                  )}
+
+                  <div style={{fontSize: '0.78rem', color: '#aaa', marginBottom: '10px'}}>
+                    Applied {new Date(a.created_at).toLocaleDateString()}
+                  </div>
+
+                  <div className="card-actions">
+                    {a.status === 'pending' && (
+                      <>
+                        <button className="btn btn-success btn-sm" onClick={async () => {
+                          await fetch('/.netlify/functions/territory-application-update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: a.id, status: 'approved' })
+                          });
+                          loadData();
+                        }}>✅ Approve</button>
+                        <button className="btn btn-danger btn-sm" onClick={async () => {
+                          await fetch('/.netlify/functions/territory-application-update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: a.id, status: 'rejected' })
+                          });
+                          loadData();
+                        }}>❌ Reject</button>
+                      </>
+                    )}
+                    {a.status === 'approved' && (
+                      <span style={{fontSize: '0.82rem', color: '#7ab87a', fontWeight: 600}}>✅ Approved — assign territory in Territories tab</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </>
         )}
       </div>
