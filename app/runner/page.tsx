@@ -80,9 +80,9 @@ export default function RunnerDashboard() {
     if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
-  const loadData = async (showRefreshing = false) => {
+  const loadData = async (showRefreshing = false, isBackgroundPoll = false) => {
     if (showRefreshing) setRefreshing(true);
-    else setLoadingData(true);
+    else if (!isBackgroundPoll) setLoadingData(true);
 
     try {
       const userRes = await fetch(`/.netlify/functions/users-get?id=${dbUserId}`);
@@ -127,7 +127,7 @@ export default function RunnerDashboard() {
     if (dbUserId) {
       loadData();
       const interval = setInterval(() => {
-        if (tab !== 'guide' && tab !== 'merchants') loadData();
+        if (tab !== 'guide' && tab !== 'merchants') loadData(false, true);
       }, 15000);
       return () => clearInterval(interval);
     }
